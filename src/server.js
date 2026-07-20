@@ -3,9 +3,19 @@ import express from 'express';
 import path from 'node:path';
 import { generate } from './orchestrator.js';
 import { ROLES, promoted } from './models.js';
+import { bus, emit } from './bus.js';
 
 const app = express();
 app.use(express.json());
+
+app.get('/api/events', (req, res) => {
+  res.set({ 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' });
+  res.flushHeaders();
+  const send = (e) => res.write(`data: ${JSON.stringify(e)}\n\n`);
+  bus.on('event', send);
+  const beat = setInterval(() => res.write(': beat\n\n'), 15000);
+  req.on('close', () => { bus.off('event', send); clearInterval(beat); });
+});
 
 app.post('/api/generate', async (req, res) => {
   const { prompt } = req.body || {};
@@ -16,9 +26,11 @@ app.post('/api/generate', async (req, res) => {
       events.push(e);
       console.log('[swarm]', JSON.stringify(e).slice(0, 200));
     });
+    emit('done', { id: result.id, verdict: result.verdict, regenerations: result.regenerations, catches: result.catches.length, preview: `/preview/${result.id}/`, name: result.plan.name });
     res.json({ ...result, preview: `/preview/${result.id}/`, events });
   } catch (err) {
     console.error(err);
+    emit('generation_error', { reason: String(err.message || err) });
     res.status(500).json({ error: String(err.message || err), events });
   }
 });

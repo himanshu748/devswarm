@@ -1,6 +1,7 @@
 import { SpanStatusCode } from '@opentelemetry/api';
 import { tracer } from './telemetry.js';
 import { ROLES, promoted } from './models.js';
+import { emit } from './bus.js';
 
 const HF_URL = 'https://router.huggingface.co/v1/chat/completions';
 
@@ -30,7 +31,7 @@ async function callModel(model, messages, temperature, span) {
   if (Array.isArray(content)) content = content.map((p) => p.text ?? '').join('');
   if (!content) content = msg.reasoning_content;
   if (!content) throw new Error(`Empty completion from ${model} (finish: ${data.choices?.[0]?.finish_reason})`);
-  return content;
+  return { content, usage };
 }
 
 // One chat completion for a role, with fallback promotion on primary failure.
@@ -43,20 +44,26 @@ export async function chat(role, messages) {
       'gen_ai.request.model': model,
       'devswarm.role': role
     });
+    const started = Date.now();
+    emit('llm_start', { role, model });
     try {
-      const out = await callModel(model, messages, cfg.temperature, span);
+      const { content, usage } = await callModel(model, messages, cfg.temperature, span);
+      emit('llm_end', { role, model, ms: Date.now() - started, in: usage.prompt_tokens ?? 0, out: usage.completion_tokens ?? 0 });
       span.end();
-      return out;
+      return content;
     } catch (err) {
       span.addEvent('fallback_promotion', { from: model, to: cfg.fallback, reason: String(err) });
       span.setAttribute('gen_ai.request.model', cfg.fallback);
+      emit('fallback', { role, from: model, to: cfg.fallback, reason: String(err.message || err) });
       try {
-        const out = await callModel(cfg.fallback, messages, cfg.temperature, span);
+        const { content, usage } = await callModel(cfg.fallback, messages, cfg.temperature, span);
         promoted[role] = cfg.fallback;
+        emit('llm_end', { role, model: cfg.fallback, ms: Date.now() - started, in: usage.prompt_tokens ?? 0, out: usage.completion_tokens ?? 0 });
         span.end();
-        return out;
+        return content;
       } catch (err2) {
         span.setStatus({ code: SpanStatusCode.ERROR, message: String(err2) });
+        emit('llm_error', { role, model: cfg.fallback, reason: String(err2.message || err2) });
         span.end();
         throw err2;
       }

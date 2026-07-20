@@ -2,6 +2,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { SpanStatusCode } from '@opentelemetry/api';
 import { tracer } from './telemetry.js';
+import { emit } from './bus.js';
 import { plan } from './agents/planner.js';
 import { generateFrontend } from './agents/frontend.js';
 import { generateBackend } from './agents/backend.js';
@@ -11,17 +12,18 @@ const MAX_REGEN = 2;
 const GENERATED_DIR = path.resolve('generated');
 
 export async function generate(prompt, onEvent = () => {}) {
+  const notify = (e) => { onEvent(e); emit('stage', e); };
   return tracer.startActiveSpan('generation', async (root) => {
     root.setAttribute('devswarm.prompt', prompt.slice(0, 500));
     try {
-      onEvent({ stage: 'planning' });
+      notify({ stage: 'planning' });
       const buildPlan = await tracer.startActiveSpan('agent.planner', async (s) => {
         const p = await plan(prompt);
         s.setAttribute('devswarm.app_name', p.name);
         s.end();
         return p;
       });
-      onEvent({ stage: 'planned', plan: buildPlan });
+      notify({ stage: 'planned', plan: buildPlan });
 
       const runAgent = (name, fn, feedback) =>
         tracer.startActiveSpan(`agent.${name}`, async (s) => {
@@ -32,7 +34,7 @@ export async function generate(prompt, onEvent = () => {}) {
           return code;
         });
 
-      onEvent({ stage: 'codegen' });
+      notify({ stage: 'codegen' });
       let [frontendCode, backendCode] = await Promise.all([
         runAgent('frontend', generateFrontend),
         runAgent('backend', generateBackend)
@@ -42,7 +44,7 @@ export async function generate(prompt, onEvent = () => {}) {
       let attempts = 0;
       const catches = [];
       while (attempts <= MAX_REGEN) {
-        onEvent({ stage: 'review', attempt: attempts + 1 });
+        notify({ stage: 'review', attempt: attempts + 1 });
         verdict = await tracer.startActiveSpan('agent.critic', async (s) => {
           const v = await review(buildPlan, frontendCode, backendCode);
           s.setAttributes({
@@ -51,6 +53,7 @@ export async function generate(prompt, onEvent = () => {}) {
           });
           for (const issue of v.issues || []) {
             s.addEvent('critic_catch', issue);
+            emit('critic_catch', issue);
           }
           s.end();
           return v;
@@ -60,7 +63,7 @@ export async function generate(prompt, onEvent = () => {}) {
 
         attempts += 1;
         if (attempts > MAX_REGEN) break;
-        onEvent({ stage: 'regenerating', attempt: attempts, issues: verdict.issues });
+        notify({ stage: 'regenerating', attempt: attempts, issues: verdict.issues });
         const feedbackFor = (target) =>
           (verdict.issues || [])
             .filter((i) => i.target === target)
