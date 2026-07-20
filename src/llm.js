@@ -1,6 +1,6 @@
 import { SpanStatusCode } from '@opentelemetry/api';
 import { tracer } from './telemetry.js';
-import { ROLES, promoted } from './models.js';
+import { ROLES, promoted, MODEL_MAX_TOKENS, DEFAULT_MAX_TOKENS } from './models.js';
 import { emit } from './bus.js';
 
 const HF_URL = 'https://router.huggingface.co/v1/chat/completions';
@@ -15,7 +15,7 @@ async function callModel(model, messages, temperature, span) {
   const res = await fetch(HF_URL, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token()}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model, messages, temperature, max_tokens: 32768 })
+    body: JSON.stringify({ model, messages, temperature, max_tokens: MODEL_MAX_TOKENS[model] ?? DEFAULT_MAX_TOKENS })
   });
   if (!res.ok) throw new Error(`HF router ${res.status} for ${model}: ${(await res.text()).slice(0, 300)}`);
   const data = await res.json();

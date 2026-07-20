@@ -23,5 +23,12 @@ export const ROLES = {
   }
 };
 
+// Provider-enforced completion caps; anything absent gets the default.
+// GLM-5.2's router cap is 16384 (400s above it).
+export const MODEL_MAX_TOKENS = {
+  'zai-org/GLM-5.2': 16384
+};
+export const DEFAULT_MAX_TOKENS = 32768;
+
 // Runtime override map: Swarm Doctor / self-heal flips roles to fallback here.
 export const promoted = {};
