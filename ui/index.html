@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DevSwarm</title>
+<style>
+  :root { --bg:#0B0E14; --panel:#131722; --border:#1F2635; --text:#E6E9F0; --dim:#8A93A6;
+          --planner:#F5A623; --frontend:#22D3EE; --backend:#A78BFA; --critic:#F87171; }
+  * { box-sizing:border-box; margin:0; }
+  body { background:var(--bg); color:var(--text); font:15px/1.5 -apple-system,'Inter',sans-serif; min-height:100vh; display:flex; flex-direction:column; align-items:center; padding:48px 24px; }
+  h1 { font-size:28px; letter-spacing:-0.5px; }
+  h1 span { color:var(--frontend); }
+  p.tag { color:var(--dim); margin:6px 0 32px; }
+  form { display:flex; gap:10px; width:100%; max-width:720px; }
+  input { flex:1; background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:14px 16px; color:var(--text); font-size:15px; }
+  input:focus { outline:none; border-color:var(--frontend); }
+  button { background:var(--frontend); color:#04222a; border:0; border-radius:10px; padding:14px 22px; font-weight:600; font-size:15px; cursor:pointer; }
+  button:disabled { opacity:0.5; cursor:wait; }
+  #log { width:100%; max-width:720px; margin-top:28px; display:flex; flex-direction:column; gap:8px; }
+  .ev { background:var(--panel); border:1px solid var(--border); border-left:3px solid var(--dim); border-radius:8px; padding:10px 14px; font-family:'JetBrains Mono',monospace; font-size:13px; }
+  .ev.planning, .ev.planned { border-left-color:var(--planner); }
+  .ev.codegen { border-left-color:var(--frontend); }
+  .ev.review { border-left-color:var(--critic); }
+  .ev.regenerating { border-left-color:var(--backend); }
+  .ev.done { border-left-color:#4ADE80; }
+  a.preview { display:inline-block; margin-top:16px; color:var(--frontend); font-weight:600; }
+</style>
+</head>
+<body>
+<h1>Dev<span>Swarm</span></h1>
+<p class="tag">the swarm that watches itself, and everything it builds</p>
+<form id="f">
+  <input id="prompt" placeholder="Build me a habit-tracker app" autocomplete="off">
+  <button id="go">Generate</button>
+</form>
+<div id="log"></div>
+<script>
+const f = document.getElementById('f'), log = document.getElementById('log'), btn = document.getElementById('go');
+function ev(cls, text) {
+  const d = document.createElement('div');
+  d.className = 'ev ' + cls; d.textContent = text;
+  log.appendChild(d);
+}
+f.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const prompt = document.getElementById('prompt').value.trim();
+  if (!prompt) return;
+  log.innerHTML = ''; btn.disabled = true;
+  ev('planning', 'swarm dispatched: ' + prompt);
+  try {
+    const r = await fetch('/api/generate', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ prompt }) });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || r.status);
+    for (const s of data.events) ev(s.stage, s.stage + (s.issues ? ': ' + s.issues.map(i=>i.description).join(' | ') : '') + (s.plan ? ': ' + s.plan.name : '') + (s.attempt ? ' (attempt ' + s.attempt + ')' : ''));
+    ev('done', 'verdict: ' + data.verdict + ', regenerations: ' + data.regenerations + ', critic catches: ' + data.catches.length);
+    const a = document.createElement('a');
+    a.className = 'preview'; a.href = data.preview; a.target = '_blank';
+    a.textContent = 'Open ' + data.plan.name + ' →';
+    log.appendChild(a);
+  } catch (err) { ev('review', 'error: ' + err.message); }
+  btn.disabled = false;
+});
+</script>
+</body>
+</html>
