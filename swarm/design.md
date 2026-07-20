@@ -11,7 +11,9 @@ Every app the swarm ships follows these rules. The frontend agent receives this 
 
 ## Look and feel
 
-- Dark-first: deep neutral background (not pure black), one saturated accent chosen to fit the app's subject, neutrals for everything else. Light apps are allowed when the subject demands it (e.g. a recipe journal), same discipline.
+- Color comes from the subject's world, never from habit. Ask: what would this thing's physical or cultural materials look like? A recipe journal earns warm paper and tomato red, a finance tool earns banknote green or ledger ink blue, a sleep app earns deep night blues, a climbing log earns chalk and granite. Commit to the palette the plan's design_direction names.
+- Banned defaults: do not reach for emerald/mint green, teal or violet-on-near-black unless the subject specifically earns them (a forest app earns green; a generic tracker does not). These are the palettes every AI tool produces; producing them means the design failed.
+- Dark or light is also a subject decision: night-adjacent and focus subjects go dark; domestic, editorial, health and daytime subjects usually deserve a light or warm theme. Do not default to dark. Same discipline either way: deep neutral surfaces, one saturated accent, neutrals for everything else.
 - Type: system font stack is fine; win on hierarchy instead: one display size for the page title, clear label/body/caption scale, tabular numerals for any stat or timer.
 - Space: generous padding (16 to 24px in cards), consistent radius (8 to 12px), 1px borders from a neutral tone rather than heavy shadows.
 - Motion: 150 to 250ms ease-out transitions on state changes only. No looping ambient animation except where the subject is time itself (timers, progress).
