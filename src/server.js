@@ -41,6 +41,7 @@ app.use('/preview/:id/', (req, res, next) => {
   express.static(path.resolve('generated', req.params.id, 'public'))(req, res, next);
 });
 
+app.get('/app', (_req, res) => res.sendFile(path.resolve('ui', 'app.html')));
 app.use(express.static(path.resolve('ui')));
 
 const port = process.env.PORT || 4100;
