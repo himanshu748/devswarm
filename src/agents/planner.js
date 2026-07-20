@@ -5,10 +5,14 @@ Respond with ONLY a JSON object:
 {
   "name": "kebab-case-app-name",
   "summary": "one sentence",
+  "archetype": "app" | "site",
+  "design_direction": "one sentence: mood, palette hint and the single signature visual for this subject",
   "entities": [{"name": "...", "fields": [{"name": "...", "type": "string|number|boolean|date"}]}],
   "api": [{"method": "GET|POST|PUT|DELETE", "path": "/api/...", "description": "..."}],
-  "pages": [{"name": "...", "description": "..."}]
+  "pages": [{"name": "...", "description": "..."}],
+  "sections": [{"name": "...", "purpose": "..."}]
 }
+Archetype "site" is for landing pages, portfolios and product/marketing sites; "app" is for tools with CRUD workflows. For a site, sections is the page outline (hero, features, pricing, FAQ, waitlist...) and the api still exists for its interactive parts (waitlist signup, contact form) with matching entities. For an app, sections may be empty.
 The api array is the shared contract: frontend and backend are both generated from it. Keep it minimal, CRUD-shaped and consistent with entities.`;
 
 export async function plan(prompt) {

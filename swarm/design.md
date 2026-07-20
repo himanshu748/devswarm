@@ -17,6 +17,18 @@ Every app the swarm ships follows these rules. The frontend agent receives this 
 - Motion: 150 to 250ms ease-out transitions on state changes only. No looping ambient animation except where the subject is time itself (timers, progress).
 - Personality comes from the subject: a habit tracker can celebrate a streak, a pomodoro timer can breathe. One signature moment per app, everything else quiet.
 
+## Marketing sites (the Framer bar)
+
+When the plan's archetype is "site" (landing page, portfolio, product site), the output must feel like a designed site, not a form with a header. All of the above still applies, plus:
+
+- Structure: sticky translucent nav (backdrop blur), full-viewport hero with one strong composition, alternating content sections, a proper footer. Use the plan's sections list as the outline.
+- Motion: scroll-triggered reveals via IntersectionObserver (fade + 12 to 24px rise, staggered children, once only), one hero entrance sequence on load, hover lift on cards (transform only). Everything gated behind prefers-reduced-motion.
+- Depth: layered backgrounds are welcome here: a subtle radial glow, a faint grid or noise layer, gradient text on the headline. At most two such devices per page; pick the ones the subject earns.
+- Typography: hero headline at clamp(2.5rem, 7vw, 5rem) with tight leading and letter-spacing, an eyebrow label above it, balanced text wrapping. Scale drops deliberately through the page.
+- Bento or feature grids beat bullet lists. Cards carry one idea each with a visual anchor (number, icon drawn as inline SVG, or stat).
+- Real copy: specific headlines about the subject, not "Welcome to our website". Social proof, pricing or FAQ sections get realistic, subject-appropriate content.
+- Forms wired for real: waitlist/contact forms POST to the contract endpoint, show inline success and error states, never dead-end.
+
 ## Copy
 
 - Sentence case, plain verbs, buttons say what they do ("Add task", not "Submit").

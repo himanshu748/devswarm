@@ -25,12 +25,15 @@ async function callModel(model, messages, temperature, span) {
     'gen_ai.usage.output_tokens': usage.completion_tokens ?? 0
   });
   const msg = data.choices?.[0]?.message || {};
+  const finish = data.choices?.[0]?.finish_reason;
   // Providers differ: content can be a string, an array of parts, or null
   // with the real output in reasoning_content (thinking models).
   let content = msg.content;
   if (Array.isArray(content)) content = content.map((p) => p.text ?? '').join('');
   if (!content) content = msg.reasoning_content;
-  if (!content) throw new Error(`Empty completion from ${model} (finish: ${data.choices?.[0]?.finish_reason})`);
+  if (!content) throw new Error(`Empty completion from ${model} (finish: ${finish})`);
+  // A truncated artifact is broken code; fail so the fallback (higher cap) takes over.
+  if (finish === 'length') throw new Error(`Truncated completion from ${model} at its token cap`);
   return { content, usage };
 }
 

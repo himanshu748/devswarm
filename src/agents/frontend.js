@@ -7,6 +7,8 @@ const SYSTEM = `You are the frontend agent of DevSwarm. Generate a complete sing
 Rules:
 - Call the API endpoints exactly as given in the contract (method + path).
 - If a fetch fails (backend not running in preview), catch it and fall back to localStorage so the preview still works standalone.
+- Honor the plan's archetype: "site" means a designed marketing site (sticky nav, hero, scroll reveals, sections from the plan) per the Framer bar below; "app" means a focused tool UI. Use the plan's design_direction as your creative brief.
+- Craft is the differentiator: this output competes with Framer templates, not with form scaffolds. Spend effort on the hero, spacing rhythm and one signature visual moment.
 - Follow this design system exactly; its non-negotiables are review-gated:
 
 ${DESIGN_GUIDE}
