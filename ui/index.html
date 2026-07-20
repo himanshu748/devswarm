@@ -21,7 +21,7 @@
   :focus-visible { outline:2px solid var(--frontend); outline-offset:2px; }
 
   /* header */
-  header { display:flex; align-items:center; gap:20px; padding:14px 20px; border-bottom:1px solid var(--border); }
+  header { display:flex; align-items:center; gap:20px; padding:14px 20px; border-bottom:1px solid var(--border); flex-wrap:wrap; }
   .wordmark { font:700 15px 'Space Grotesk'; letter-spacing:0.22em; white-space:nowrap; }
   .wordmark em { font-style:normal; color:var(--dim); font-weight:500; }
   form { flex:1; display:flex; gap:10px; max-width:720px; }
@@ -120,6 +120,19 @@
     main { display:flex; flex-direction:column; }
     #graph { height:380px; }
     #rail { grid-row:auto; }
+    form { flex-basis:100%; order:3; max-width:none; }
+    #status { margin-left:0; }
+  }
+  @media (max-width:480px) {
+    .wordmark em { display:none; }
+    .span-row { grid-template-columns:110px 1fr; }
+    .span-name { font-size:9.5px; }
+    .span-bar .t { display:none; }
+    .node { width:110px; }
+    .node .dot { width:44px; height:44px; }
+    .node .sub { font-size:9.5px; }
+    .vital-num { font-size:24px; }
+    #graph { height:330px; }
   }
   @media (prefers-reduced-motion: reduce) {
     #edges line.flow { animation:none; stroke-dasharray:none; stroke:var(--dim); }

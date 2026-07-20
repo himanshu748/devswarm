@@ -77,6 +77,12 @@ export async function generate(prompt, onEvent = () => {}) {
         ]);
       }
 
+      // Models occasionally mangle the viewport meta; a broken one silently
+      // kills mobile rendering, so normalize it deterministically.
+      const VIEWPORT = '<meta name="viewport" content="width=device-width, initial-scale=1">';
+      frontendCode = frontendCode.replace(/<meta[^>]*viewport[^>]*>/i, VIEWPORT);
+      if (!frontendCode.includes(VIEWPORT)) frontendCode = frontendCode.replace(/<head>/i, `<head>\n${VIEWPORT}`);
+
       const id = `${buildPlan.name}-${Date.now().toString(36)}`;
       const dir = path.join(GENERATED_DIR, id);
       await mkdir(path.join(dir, 'public'), { recursive: true });
