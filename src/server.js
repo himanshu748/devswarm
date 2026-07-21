@@ -37,6 +37,16 @@ app.post('/api/generate', async (req, res) => {
 
 app.get('/api/models', (_req, res) => res.json({ roles: ROLES, promoted }));
 
+app.post('/api/doctor/run', async (_req, res) => {
+  try {
+    const { diagnose } = await import('./agents/doctor.js');
+    res.json(await diagnose(Number(_req.body?.minutes) || 180));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: String(err.message || err) });
+  }
+});
+
 app.use('/preview/:id/', (req, res, next) => {
   express.static(path.resolve('generated', req.params.id, 'public'))(req, res, next);
 });

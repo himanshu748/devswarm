@@ -1,0 +1,24 @@
+{
+  "alert": "DevSwarm: critic catch rate flatlined",
+  "alertType": "TRACES_BASED_ALERT",
+  "description": "Generations are completing but the critic has caught nothing across the window. Historically the catch rate is well above zero, so a flatline means the critic is silently broken (bad JSON, wrong model, prompt regression), not that generated code became perfect.",
+  "severity": "critical",
+  "condition": {
+    "compareOp": "<=",
+    "target": 0,
+    "matchType": "2",
+    "compositeQuery": {
+      "queryType": "clickhouse_sql",
+      "panelType": "graph",
+      "chQueries": {
+        "A": {
+          "query": "SELECT toStartOfInterval(timestamp, INTERVAL 30 MINUTE) AS ts, sum(attributes_number['devswarm.generation.critic_catches']) AS value FROM signoz_traces.distributed_signoz_index_v3 WHERE serviceName='devswarm' AND name='generation' AND timestamp BETWEEN {{.start_datetime}} AND {{.end_datetime}} GROUP BY ts HAVING count() > 0 ORDER BY ts",
+          "disabled": false
+        }
+      }
+    }
+  },
+  "evalWindow": "1h0m0s",
+  "frequency": "5m0s",
+  "labels": { "team": "devswarm" }
+}

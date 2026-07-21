@@ -20,6 +20,11 @@ export const ROLES = {
     primary: 'deepseek-ai/DeepSeek-V4-Pro',
     fallback: 'deepseek-ai/DeepSeek-V4-Flash',
     temperature: 0.1
+  },
+  doctor: {
+    primary: 'zai-org/GLM-5.2',
+    fallback: 'Qwen/Qwen3.6-35B-A3B',
+    temperature: 0.1
   }
 };
 

@@ -174,6 +174,11 @@
     </div>
     <div class="roles" id="roles"></div>
     <div>
+      <div class="vital-label" style="margin-bottom:8px">Swarm doctor</div>
+      <button id="doctor-btn" style="width:100%;background:color-mix(in srgb, var(--doctor) 16%, transparent);color:var(--doctor);border:1px solid color-mix(in srgb, var(--doctor) 40%, transparent);border-radius:8px;padding:8px 12px;font:600 12px 'Inter';cursor:pointer">Run diagnosis</button>
+      <div id="doctor-card" style="display:none;margin-top:8px;padding:10px 12px;background:var(--panel);border:1px solid var(--border);border-left:2.5px solid var(--doctor);border-radius:8px;font-size:11.5px;color:var(--dim)"></div>
+    </div>
+    <div>
       <div class="vital-label" style="margin-bottom:8px">Feed</div>
       <div id="feed"><div class="empty">quiet</div></div>
     </div>
@@ -279,6 +284,14 @@ function relabelSpan(role, model) {
 }
 
 const es = new EventSource('/api/events');
+document.getElementById('doctor-btn').addEventListener('click', async () => {
+  const btn = document.getElementById('doctor-btn');
+  btn.disabled = true; btn.textContent = 'Reading traces...';
+  try { await fetch('/api/doctor/run', { method: 'POST' }); }
+  catch { feed('', 'critic', '<b>doctor</b> diagnosis failed'); }
+  btn.disabled = false; btn.textContent = 'Run diagnosis';
+});
+
 es.onmessage = (m) => {
   const e = JSON.parse(m.data);
   if (e.type === 'llm_start') { activate(e.role, e.model); chip(e.role, e.model, roleModels[e.role]?.fb); spanStart(e.role, e.model); }
@@ -303,6 +316,13 @@ es.onmessage = (m) => {
     setStatus(e.stage + (e.attempt ? ' '+e.attempt : ''), true);
     if (e.stage === 'regenerating') ROLES.forEach(r => nodes[r].classList.remove('flagged'));
     if (e.stage === 'planned') feed('', 'planner', `<b>plan locked</b> ${e.plan.name}: ${e.plan.api.length} endpoints`);
+  }
+  if (e.type === 'doctor_diagnosis') {
+    const card = document.getElementById('doctor-card');
+    card.style.display = 'block';
+    card.innerHTML = `<b style="color:var(--text)">${e.summary}</b>` +
+      (e.applied?.length ? '<div style="margin-top:6px">' + e.applied.map(a => `→ ${a.action.replace('_',' ')} for ${a.role}: ${a.reason}`).join('<br>') + '</div>' : '<div style="margin-top:6px">no routing changes needed</div>');
+    feed('', 'doctor', `<b>doctor</b> ${e.summary.slice(0,90)}`);
   }
   if (e.type === 'done') {
     setStatus('swarm idle');
