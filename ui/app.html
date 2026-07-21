@@ -266,8 +266,16 @@ function spanStart(role, model) {
     if (bars[role].live) requestAnimationFrame(grow);
   });
 }
-function spanEnd(role, ms) {
-  if (bars[role]) { bars[role].live = false; bars[role].bar.querySelector('.t').textContent = (ms/1000).toFixed(1)+'s'; }
+function spanEnd(role, ms, tokens) {
+  if (bars[role]) {
+    bars[role].live = false;
+    bars[role].bar.querySelector('.t').textContent = (ms/1000).toFixed(1)+'s · '+tokens.toLocaleString()+' tok';
+  }
+}
+function relabelSpan(role, model) {
+  const row = bars[role]?.bar.closest('.span-row');
+  const name = row?.querySelector('.span-name');
+  if (name) name.textContent = `llm.${role} · ${model.split('/')[1]} ⚡`;
 }
 
 const es = new EventSource('/api/events');
@@ -278,9 +286,11 @@ es.onmessage = (m) => {
     roleTokens[e.role] = (roleTokens[e.role]||0) + e.in + e.out;
     totalTokens += e.in + e.out;
     document.getElementById('tokens').textContent = totalTokens.toLocaleString();
-    deactivate(e.role); spanEnd(e.role, e.ms);
+    deactivate(e.role); spanEnd(e.role, e.ms, e.in + e.out);
+    const sub = document.getElementById('sub-'+e.role);
+    if (sub) sub.innerHTML = `<b>${e.model.split('/')[1]}</b>${(e.ms/1000).toFixed(0)}s · ${(roleTokens[e.role]||0).toLocaleString()} tok`;
   }
-  if (e.type === 'fallback') { chip(e.role, e.to, true); feed('', e.role, `<b>fallback promoted</b> ${e.role}: ${e.to.split('/')[1]}`); }
+  if (e.type === 'fallback') { chip(e.role, e.to, true); relabelSpan(e.role, e.to); feed('', e.role, `<b>fallback promoted</b> ${e.role}: ${e.to.split('/')[1]}`); }
   if (e.type === 'critic_catch') {
     const n = +document.getElementById('catches').textContent + 1;
     document.getElementById('catches').textContent = n;

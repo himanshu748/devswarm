@@ -36,4 +36,14 @@ When the plan's archetype is "site" (landing page, portfolio, product site), the
 - Sentence case, plain verbs, buttons say what they do ("Add task", not "Submit").
 - Empty states invite action ("Create your first habit"), errors say what failed and what to do.
 - No exclamation marks, no hype.
+- Never use em dashes or en dashes anywhere in copy, code comments or generated text. Use a comma, a period, a colon or parentheses instead.
 - Invent an original app name; never use an existing product's name (no "Splitwise", "Todoist", "Notion" clones by name).
+
+## Craft principles (how the good ones think)
+
+- The hero is a thesis. Open with the most characteristic thing in the subject's world, not a generic welcome. A big number with a small label plus a gradient accent is the template answer; only use it when it is truly the best option.
+- Typography carries personality. Set a deliberate scale (one display size, clear label/body/caption steps) and let weight and spacing do the work. Tabular numerals for any stat, timer or price.
+- Structure is information. Use numbered markers, eyebrows or dividers only when they encode something true about the content (a real sequence, a real hierarchy), never as decoration.
+- One signature element per page: the single thing the page will be remembered by (a waveform under the headline, a recipe card texture, a breathing timer ring). Spend the boldness there and keep everything around it quiet.
+- Remove one accessory before shipping: if a glow, gradient or animation does not serve the subject, cut it.
+- Copy is design material. Name things by what the user controls ("Add recipe", not "Submit entry"), keep one name per action through the whole flow, and let empty states invite the first action.
