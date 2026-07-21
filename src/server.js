@@ -37,6 +37,24 @@ app.post('/api/generate', async (req, res) => {
 
 app.get('/api/models', (_req, res) => res.json({ roles: ROLES, promoted }));
 
+// SigNoz alert webhook: an alert firing IS the trigger for self-healing.
+let doctorBusy = false;
+app.post('/api/doctor/webhook', async (req, res) => {
+  res.json({ ok: true });
+  if (doctorBusy) return;
+  doctorBusy = true;
+  try {
+    console.log('[doctor] woken by SigNoz alert:', req.body?.title || req.body?.alerts?.[0]?.labels?.alertname || 'unknown');
+    const { diagnose } = await import('./agents/doctor.js');
+    const result = await diagnose(60);
+    console.log('[doctor] diagnosis:', result.summary);
+  } catch (err) {
+    console.error('[doctor] webhook diagnosis failed:', err);
+  } finally {
+    doctorBusy = false;
+  }
+});
+
 app.post('/api/doctor/run', async (_req, res) => {
   try {
     const { diagnose } = await import('./agents/doctor.js');
