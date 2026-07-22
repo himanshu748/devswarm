@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { SpanStatusCode } from '@opentelemetry/api';
-import { tracer } from './telemetry.js';
+import { tracer, m, slog } from './telemetry.js';
 import { emit } from './bus.js';
 import { plan } from './agents/planner.js';
 import { generateFrontend } from './agents/frontend.js';
@@ -10,6 +10,41 @@ import { review } from './agents/critic.js';
 
 const MAX_REGEN = 2;
 const GENERATED_DIR = path.resolve('generated');
+
+// A ready-to-import SigNoz dashboard scoped to one generated app's service name.
+const appDashboard = (id, plan) => ({
+  title: `App / ${plan.name}`,
+  description: `Auto-provisioned by DevSwarm at generation time for ${id}. RED metrics from the app's own HTTP spans.`,
+  tags: ['devswarm-generated'],
+  layout: [
+    { i: 'rate', x: 0, y: 0, w: 4, h: 3 }, { i: 'errors', x: 4, y: 0, w: 4, h: 3 }, { i: 'duration', x: 8, y: 0, w: 4, h: 3 },
+    { i: 'routes', x: 0, y: 3, w: 12, h: 4 }
+  ],
+  widgets: [
+    { id: 'rate', title: 'Requests', panelTypes: 'graph', query: { queryType: 'clickhouse_sql', clickhouse_sql: [{ name: 'A', legend: 'req', disabled: false, query: `SELECT toStartOfInterval(timestamp, INTERVAL 1 MINUTE) AS ts, count() AS value FROM signoz_traces.distributed_signoz_index_v3 WHERE serviceName='${id}' AND timestamp BETWEEN {{.start_datetime}} AND {{.end_datetime}} GROUP BY ts ORDER BY ts` }], builder: { queryData: [], queryFormulas: [] }, promql: [] } },
+    { id: 'errors', title: 'Errors (4xx/5xx)', panelTypes: 'graph', query: { queryType: 'clickhouse_sql', clickhouse_sql: [{ name: 'A', legend: 'errors', disabled: false, query: `SELECT toStartOfInterval(timestamp, INTERVAL 1 MINUTE) AS ts, countIf(responseStatusCode >= '400') AS value FROM signoz_traces.distributed_signoz_index_v3 WHERE serviceName='${id}' AND timestamp BETWEEN {{.start_datetime}} AND {{.end_datetime}} GROUP BY ts ORDER BY ts` }], builder: { queryData: [], queryFormulas: [] }, promql: [] } },
+    { id: 'duration', title: 'p95 latency (ms)', panelTypes: 'graph', query: { queryType: 'clickhouse_sql', clickhouse_sql: [{ name: 'A', legend: 'p95', disabled: false, query: `SELECT toStartOfInterval(timestamp, INTERVAL 1 MINUTE) AS ts, round(quantile(0.95)(durationNano)/1e6, 1) AS value FROM signoz_traces.distributed_signoz_index_v3 WHERE serviceName='${id}' AND timestamp BETWEEN {{.start_datetime}} AND {{.end_datetime}} GROUP BY ts ORDER BY ts` }], builder: { queryData: [], queryFormulas: [] }, promql: [] } },
+    { id: 'routes', title: 'Routes', panelTypes: 'table', query: { queryType: 'clickhouse_sql', clickhouse_sql: [{ name: 'A', legend: '', disabled: false, query: `SELECT httpMethod AS method, name AS route, count() AS requests, round(avg(durationNano)/1e6,1) AS avg_ms FROM signoz_traces.distributed_signoz_index_v3 WHERE serviceName='${id}' AND timestamp BETWEEN {{.start_datetime}} AND {{.end_datetime}} GROUP BY method, route ORDER BY requests DESC LIMIT 20` }], builder: { queryData: [], queryFormulas: [] }, promql: [] } }
+  ]
+});
+
+// Best effort: if a SigNoz API token is configured, the app's dashboard exists
+// in SigNoz before the user has even opened the preview.
+async function provisionDashboard(id, plan) {
+  const token = process.env.SIGNOZ_API_TOKEN;
+  const base = (process.env.SIGNOZ_URL || 'http://localhost:8080').replace(/\/$/, '');
+  if (!token) return { provisioned: false, reason: 'SIGNOZ_API_TOKEN not set' };
+  try {
+    const res = await fetch(`${base}/api/v1/dashboards`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'SIGNOZ-API-KEY': token },
+      body: JSON.stringify(appDashboard(id, plan))
+    });
+    return { provisioned: res.ok, status: res.status };
+  } catch (err) {
+    return { provisioned: false, reason: String(err.message || err).slice(0, 120) };
+  }
+}
 
 const otelBootstrap = (id) => `import { NodeTracerProvider, BatchSpanProcessor } from '@opentelemetry/sdk-trace-node';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
@@ -89,6 +124,7 @@ export async function generate(prompt, onEvent = () => {}) {
           });
           for (const issue of v.issues || []) {
             s.addEvent('critic_catch', issue);
+            m.catches.add(1, { target: issue.target, severity: issue.severity });
             emit('critic_catch', issue);
           }
           s.end();
@@ -128,6 +164,12 @@ export async function generate(prompt, onEvent = () => {}) {
       // so its traffic appears in SigNoz under its own service name.
       await writeFile(path.join(dir, 'otel.mjs'), otelBootstrap(id));
       await writeFile(path.join(dir, 'README.md'), appReadme(id, buildPlan));
+      await writeFile(path.join(dir, 'signoz-dashboard.json'), JSON.stringify(appDashboard(id, buildPlan), null, 2));
+      const dash = await provisionDashboard(id, buildPlan);
+      if (dash.provisioned) {
+        slog('info', `provisioned SigNoz dashboard for generated app ${id}`, { 'devswarm.generation.id': id });
+        notify({ stage: 'dashboard_provisioned', id });
+      }
       await writeFile(
         path.join(dir, 'review.json'),
         JSON.stringify({ verdict: verdict.verdict, regenerations: attempts, catches }, null, 2)
@@ -138,6 +180,10 @@ export async function generate(prompt, onEvent = () => {}) {
         'devswarm.generation.verdict': verdict.verdict,
         'devswarm.generation.regenerations': attempts,
         'devswarm.generation.critic_catches': catches.length
+      });
+      m.generations.add(1, { verdict: verdict.verdict });
+      slog('info', `generation ${id} complete: ${verdict.verdict}, ${catches.length} catches, ${attempts} regenerations`, {
+        'devswarm.generation.id': id, verdict: verdict.verdict, catches: catches.length, regenerations: attempts
       });
       root.end();
       return { id, plan: buildPlan, verdict: verdict.verdict, regenerations: attempts, catches };

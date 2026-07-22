@@ -1,5 +1,5 @@
 import { SpanStatusCode } from '@opentelemetry/api';
-import { tracer } from './telemetry.js';
+import { tracer, m, slog } from './telemetry.js';
 import { ROLES, promoted, MODEL_MAX_TOKENS, DEFAULT_MAX_TOKENS } from './models.js';
 import { emit } from './bus.js';
 
@@ -50,23 +50,35 @@ export async function chat(role, messages) {
     const started = Date.now();
     const traceId = span.spanContext().traceId;
     emit('llm_start', { role, model, traceId });
+    const record = (usedModel, usage, outcome) => {
+      const tok = (usage.prompt_tokens ?? 0) + (usage.completion_tokens ?? 0);
+      m.tokens.add(tok, { role, model: usedModel });
+      m.llmCalls.add(1, { role, model: usedModel, outcome });
+      m.llmDuration.record((Date.now() - started) / 1000, { role, model: usedModel });
+    };
     try {
       const { content, usage } = await callModel(model, messages, cfg.temperature, span);
-      emit('llm_end', { role, model, ms: Date.now() - started, in: usage.prompt_tokens ?? 0, out: usage.completion_tokens ?? 0 });
+      record(model, usage, 'ok');
+      emit('llm_end', { role, model, ms: Date.now() - started, in: usage.prompt_tokens ?? 0, out: usage.completion_tokens ?? 0, traceId });
       span.end();
       return content;
     } catch (err) {
       span.addEvent('fallback_promotion', { from: model, to: cfg.fallback, reason: String(err) });
       span.setAttribute('gen_ai.request.model', cfg.fallback);
+      m.fallbacks.add(1, { role, from: model, to: cfg.fallback });
+      slog('warn', `fallback promoted for ${role}: ${model} -> ${cfg.fallback}`, { role, from: model, to: cfg.fallback, reason: String(err.message || err).slice(0, 200) });
       emit('fallback', { role, from: model, to: cfg.fallback, reason: String(err.message || err) });
       try {
         const { content, usage } = await callModel(cfg.fallback, messages, cfg.temperature, span);
         promoted[role] = cfg.fallback;
-        emit('llm_end', { role, model: cfg.fallback, ms: Date.now() - started, in: usage.prompt_tokens ?? 0, out: usage.completion_tokens ?? 0 });
+        record(cfg.fallback, usage, 'ok_after_fallback');
+        emit('llm_end', { role, model: cfg.fallback, ms: Date.now() - started, in: usage.prompt_tokens ?? 0, out: usage.completion_tokens ?? 0, traceId });
         span.end();
         return content;
       } catch (err2) {
         span.setStatus({ code: SpanStatusCode.ERROR, message: String(err2) });
+        m.llmCalls.add(1, { role, model: cfg.fallback, outcome: 'error' });
+        slog('error', `llm call failed for ${role} on both primary and fallback`, { role, reason: String(err2.message || err2).slice(0, 200) });
         emit('llm_error', { role, model: cfg.fallback, reason: String(err2.message || err2) });
         span.end();
         throw err2;

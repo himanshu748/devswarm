@@ -60,6 +60,8 @@ export async function diagnose(minutes = 180) {
     if (a.action === 'promote_fallback') { promoted[a.role] = ROLES[a.role].fallback; applied.push(a); }
     if (a.action === 'reset_to_primary') { delete promoted[a.role]; applied.push(a); }
   }
+  const { slog } = await import('../telemetry.js');
+  slog('info', `doctor diagnosis: ${verdict.summary}`, { applied: applied.length, findings: (verdict.findings || []).length });
   emit('doctor_diagnosis', { summary: verdict.summary, findings: verdict.findings, applied });
   return { stats, ...verdict, applied };
 }

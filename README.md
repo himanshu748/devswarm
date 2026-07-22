@@ -24,9 +24,9 @@ Self-host SigNoz and import the dashboards and alerts: see [observability/README
 1. Planner (GLM-5.2) turns the prompt into a typed build plan with an API contract and a subject-derived design direction.
 2. Frontend and backend agents generate in parallel against that contract, under a design system with hard non-negotiables (responsive, real states, accessibility floor).
 3. The critic (DeepSeek-V4-Pro) checks contract conformance verbatim, security and runtime bugs; failures route back to the owning agent, max 2 regeneration rounds.
-4. The result ships with a live preview, the honest review report, and its own OTel bootstrap so its traffic appears in SigNoz seconds after generation.
+4. The result ships with a live preview, the honest review report, its own OTel bootstrap so its traffic appears in SigNoz seconds after generation, and a ready-to-import SigNoz dashboard scoped to its service name (auto-provisioned when SIGNOZ_API_TOKEN is set).
 
-Every step is a span. Every fallback promotion and critic catch is a span event. When something is slow or wrong, the answer is one trace away.
+Every step is a span, and the swarm ships all three signals: traces (GenAI semconv spans), metrics (token counters, LLM latency histograms, fallback and catch counters) and structured logs, all OTLP to SigNoz. When something is slow or wrong, the answer is one trace away.
 
 ## Self-healing loop
 
