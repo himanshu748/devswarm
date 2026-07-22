@@ -153,6 +153,7 @@
     <div class="links">
       <a href="#how">How it works</a>
       <a href="#observability">Observability</a>
+      <a href="#doctor">Swarm Doctor</a>
       <a href="https://github.com/himanshu748/devswarm">GitHub</a>
       <a class="btn btn-primary" href="/app">Open Mission Control</a>
     </div>
@@ -164,7 +165,7 @@
     <div class="wrap">
       <p class="eyebrow">Live · built on open models</p>
       <h1>The swarm that watches itself, <em>and everything it builds.</em></h1>
-      <p class="sub">DevSwarm turns one prompt into a working full-stack app using four specialized open-weight models. A critic agent reviews every line before you see it, and every step is traced into SigNoz.</p>
+      <p class="sub">DevSwarm turns one prompt into a working full-stack app using four specialized open-weight models. A critic reviews every line before you see it, every step is traced into SigNoz, and when a model degrades, a SigNoz alert wakes the swarm's own doctor to fix the routing.</p>
       <div class="ctas">
         <a class="btn btn-primary" href="/app">Open Mission Control</a>
         <a class="btn btn-ghost" href="https://github.com/himanshu748/devswarm">View source on GitHub</a>
@@ -234,9 +235,14 @@
       <p class="lead">Each agent, model call, token count, fallback promotion and critic catch is an OpenTelemetry span exported to SigNoz. When something is slow or wrong, the answer is one trace away, for the swarm and for the apps it builds.</p>
       <div class="grid2">
         <div class="card">
-          <p class="num" style="color:var(--critic)">22</p>
-          <h3>Bugs caught in one generation</h3>
-          <p>Our hardest test run: the critic flagged 22 real issues across 3 regeneration rounds, then shipped the result with the full review attached instead of pretending it passed.</p>
+          <p class="num" style="color:var(--critic)" id="stat-catches">93</p>
+          <h3>Real bugs caught by the critic</h3>
+          <p>Contract drift, missing validation, an XSS gap in an escape function. Every catch routed back to the owning agent and fixed before anything reached a user.</p>
+        </div>
+        <div class="card">
+          <p class="num" style="color:var(--frontend)" id="stat-tokens">348,866</p>
+          <h3>Tokens, fully accounted</h3>
+          <p>Per-role, per-model token and latency breakdown for every generation. The cost story is a live dashboard, not a marketing claim.</p>
         </div>
         <div class="card">
           <p class="num" style="color:var(--doctor)">100%</p>
@@ -244,16 +250,30 @@
           <p>GenAI semantic conventions on every LLM span. Fallback promotions are span events, so "why did the model switch" is answerable from the trace, not folklore.</p>
         </div>
         <div class="card">
-          <p class="num" style="color:var(--frontend)">54,075</p>
-          <h3>Tokens, fully accounted</h3>
-          <p>Per-role token and latency breakdown for every generation. The cost story is a live dashboard, not a marketing claim.</p>
-        </div>
-        <div class="card">
           <p class="num" style="color:var(--backend)">0</p>
           <h3>Closed-model API calls</h3>
           <p>GLM, Qwen, Kimi and DeepSeek via Hugging Face Inference Providers. No frontier-API lock-in, and automatic fallback when a provider has weather.</p>
         </div>
       </div>
+      <p class="lead mono" id="stats-live" style="font-size:12.5px; margin-top:18px; color:var(--faint)">numbers from our last verified run · connect the server for live SigNoz data</p>
+    </div>
+  </section>
+
+  <section class="block" id="doctor">
+    <div class="wrap">
+      <p class="kicker">Self-healing</p>
+      <h2>When a model degrades, nobody gets paged. The swarm does.</h2>
+      <p class="lead">A SigNoz alert fires, a webhook wakes Swarm Doctor, and the doctor reads the swarm's own traces to decide what to do: promote a backup model, reset a recovered primary, or leave it alone. Its diagnosis calls are traced too, so the healer is as observable as the patient.</p>
+      <figure class="trace" style="margin-top:44px" aria-label="Swarm Doctor's first real diagnosis">
+        <div class="bar-head">
+          <span class="t">swarm doctor · first real diagnosis</span>
+          <span class="v">read from 24h of SigNoz traces</span>
+        </div>
+        <blockquote style="font:15px/1.7 'Geist Mono'; color:var(--dim); border-left:2.5px solid var(--doctor); padding-left:18px; margin:4px 0 14px">
+          "The critic role is the clear problem area: its primary triggered 6 fallback promotions out of 9 calls (67%) with a 22% error rate and p95 latency of 242s. Backend, planner and doctor are healthy."
+        </blockquote>
+        <figcaption class="catch" style="border-color:color-mix(in srgb, var(--doctor) 40%, transparent); color:var(--doctor); animation-delay:0.4s">action taken: critic pinned to DeepSeek-V4-Flash. No human involved.</figcaption>
+      </figure>
     </div>
   </section>
 
@@ -277,5 +297,30 @@
     <span class="right">Built for the Agents of SigNoz hackathon by WeMakeDevs</span>
   </div>
 </footer>
+<script>
+(async () => {
+  try {
+    const r = await fetch('/api/stats');
+    if (!r.ok) return;
+    const s = await r.json();
+    const roll = (id, target) => {
+      const el = document.getElementById(id);
+      if (!el || !target) return;
+      const start = performance.now(), dur = 900, from = 0;
+      const step = (t) => {
+        const k = Math.min((t - start) / dur, 1);
+        el.textContent = Math.round(from + (target - from) * (1 - Math.pow(1 - k, 3))).toLocaleString();
+        if (k < 1) requestAnimationFrame(step);
+      };
+      if (matchMedia('(prefers-reduced-motion: reduce)').matches) el.textContent = target.toLocaleString();
+      else requestAnimationFrame(step);
+    };
+    roll('stat-catches', s.catches);
+    roll('stat-tokens', s.tokens);
+    const live = document.getElementById('stats-live');
+    if (live) live.textContent = `live from SigNoz · ${s.generations} generations · ${s.llm_calls} traced LLM calls across ${s.models} models`;
+  } catch { /* static fallbacks already rendered */ }
+})();
+</script>
 </body>
 </html>

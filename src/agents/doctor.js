@@ -7,7 +7,7 @@ import { emit } from '../bus.js';
 const exec = promisify(execFile);
 const CH = process.env.SIGNOZ_CLICKHOUSE_CONTAINER || 'signoz-telemetrystore-clickhouse-0-0';
 
-async function ch(sql) {
+export async function ch(sql) {
   const { stdout } = await exec('docker', ['exec', CH, 'clickhouse-client', '-q', `${sql} FORMAT JSON`]);
   return JSON.parse(stdout).data;
 }

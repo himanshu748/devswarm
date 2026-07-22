@@ -48,7 +48,8 @@ export async function chat(role, messages) {
       'devswarm.role': role
     });
     const started = Date.now();
-    emit('llm_start', { role, model });
+    const traceId = span.spanContext().traceId;
+    emit('llm_start', { role, model, traceId });
     try {
       const { content, usage } = await callModel(model, messages, cfg.temperature, span);
       emit('llm_end', { role, model, ms: Date.now() - started, in: usage.prompt_tokens ?? 0, out: usage.completion_tokens ?? 0 });
