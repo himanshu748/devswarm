@@ -13,13 +13,22 @@ Respond with ONLY JSON:
 }
 Verdict is fail only if there is at least one high-severity issue. Be concrete; vague style opinions are out of scope.`;
 
-export async function review(buildPlan, frontendCode, backendCode) {
-  const out = await chat('critic', [
+export async function review(buildPlan, frontendCode, backendCode, previousIssues) {
+  const messages = [
     { role: 'system', content: SYSTEM },
     {
       role: 'user',
       content: `Plan (contract):\n${JSON.stringify(buildPlan.api, null, 2)}\n\nEntities:\n${JSON.stringify(buildPlan.entities, null, 2)}\n\n--- FRONTEND (index.html) ---\n${frontendCode}\n\n--- BACKEND (server.js) ---\n${backendCode}`
     }
-  ]);
+  ];
+  if (previousIssues?.length) {
+    // Re-reviews are delta reviews. A critic that re-audits everything with
+    // fresh eyes finds different highs every round and never converges.
+    messages.push({
+      role: 'user',
+      content: `This is a re-review after a regeneration. You previously flagged these issues:\n${JSON.stringify(previousIssues, null, 2)}\n\nYour job now: (1) verify each previously flagged issue is fixed, and flag it again only if it is not; (2) flag NEW issues only if they were introduced by the fix or are high-severity problems you clearly should have caught before. Do not raise fresh medium or low findings on code that was already reviewed. If all previous issues are fixed and no new highs exist, the verdict is pass.`
+    });
+  }
+  const out = await chat('critic', messages);
   return extractJson(out);
 }

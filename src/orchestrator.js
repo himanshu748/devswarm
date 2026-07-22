@@ -96,10 +96,10 @@ export async function generate(prompt, onEvent = () => {}) {
       });
       notify({ stage: 'planned', plan: buildPlan });
 
-      const runAgent = (name, fn, feedback) =>
+      const runAgent = (name, fn, feedback, previousCode) =>
         tracer.startActiveSpan(`agent.${name}`, async (s) => {
           if (feedback) s.setAttribute('devswarm.regeneration', true);
-          const code = await fn(buildPlan, feedback);
+          const code = await fn(buildPlan, feedback, previousCode);
           s.setAttribute('devswarm.code_bytes', code.length);
           s.end();
           return code;
@@ -117,7 +117,7 @@ export async function generate(prompt, onEvent = () => {}) {
       while (attempts <= MAX_REGEN) {
         notify({ stage: 'review', attempt: attempts + 1 });
         verdict = await tracer.startActiveSpan('agent.critic', async (s) => {
-          const v = await review(buildPlan, frontendCode, backendCode);
+          const v = await review(buildPlan, frontendCode, backendCode, verdict?.issues);
           s.setAttributes({
             'devswarm.review.verdict': v.verdict,
             'devswarm.review.issue_count': v.issues?.length ?? 0
@@ -144,8 +144,8 @@ export async function generate(prompt, onEvent = () => {}) {
         const feFb = feedbackFor('frontend');
         const beFb = feedbackFor('backend');
         [frontendCode, backendCode] = await Promise.all([
-          feFb ? runAgent('frontend', generateFrontend, feFb) : frontendCode,
-          beFb ? runAgent('backend', generateBackend, beFb) : backendCode
+          feFb ? runAgent('frontend', generateFrontend, feFb, frontendCode) : frontendCode,
+          beFb ? runAgent('backend', generateBackend, beFb, backendCode) : backendCode
         ]);
       }
 
