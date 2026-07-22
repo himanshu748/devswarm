@@ -11,26 +11,52 @@ function token() {
   return t;
 }
 
+// Streaming keeps bytes flowing on multi-minute codegen calls; buffered
+// responses sat idle past the router's gateway timeout and 504ed.
 async function callModel(model, messages, temperature, span) {
   const res = await fetch(HF_URL, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token()}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model, messages, temperature, max_tokens: MODEL_MAX_TOKENS[model] ?? DEFAULT_MAX_TOKENS })
+    body: JSON.stringify({
+      model, messages, temperature,
+      max_tokens: MODEL_MAX_TOKENS[model] ?? DEFAULT_MAX_TOKENS,
+      stream: true,
+      stream_options: { include_usage: true }
+    })
   });
   if (!res.ok) throw new Error(`HF router ${res.status} for ${model}: ${(await res.text()).slice(0, 300)}`);
-  const data = await res.json();
-  const usage = data.usage || {};
+
+  let content = '';
+  let reasoning = '';
+  let usage = {};
+  let finish = null;
+  let buffer = '';
+  const decoder = new TextDecoder();
+  for await (const chunk of res.body) {
+    buffer += decoder.decode(chunk, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop();
+    for (const line of lines) {
+      const payload = line.replace(/^data:\s*/, '').trim();
+      if (!payload || payload === '[DONE]' || !line.startsWith('data:')) continue;
+      let data;
+      try { data = JSON.parse(payload); } catch { continue; }
+      if (data.usage) usage = data.usage;
+      const choice = data.choices?.[0];
+      if (!choice) continue;
+      if (choice.finish_reason) finish = choice.finish_reason;
+      const delta = choice.delta || {};
+      if (typeof delta.content === 'string') content += delta.content;
+      else if (Array.isArray(delta.content)) content += delta.content.map((p) => p.text ?? '').join('');
+      if (typeof delta.reasoning_content === 'string') reasoning += delta.reasoning_content;
+    }
+  }
+
   span.setAttributes({
     'gen_ai.usage.input_tokens': usage.prompt_tokens ?? 0,
     'gen_ai.usage.output_tokens': usage.completion_tokens ?? 0
   });
-  const msg = data.choices?.[0]?.message || {};
-  const finish = data.choices?.[0]?.finish_reason;
-  // Providers differ: content can be a string, an array of parts, or null
-  // with the real output in reasoning_content (thinking models).
-  let content = msg.content;
-  if (Array.isArray(content)) content = content.map((p) => p.text ?? '').join('');
-  if (!content) content = msg.reasoning_content;
+  if (!content) content = reasoning;
   if (!content) throw new Error(`Empty completion from ${model} (finish: ${finish})`);
   // A truncated artifact is broken code; fail so the fallback (higher cap) takes over.
   if (finish === 'length') throw new Error(`Truncated completion from ${model} at its token cap`);
