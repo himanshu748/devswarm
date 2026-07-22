@@ -1,1 +1,0 @@
-{"nodes": [{"id": "clickhouse-keeper", "label": "ClickHouse Keeper", "type": "component", "summary": "clickhouse-keeper 25.12.5 providing Raft coordination on port 9181; replicas can sit readonly after a cold restart until it reconnects.", "source_file": "observability/pours/deployment/telemetrykeeper/clickhousekeeper/keeper-0.yaml"}], "edges": [], "hyperedges": []}
