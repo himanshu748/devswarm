@@ -1,15 +1,40 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { chat, extractJson } from '../llm.js';
-import { ROLES, promoted } from '../models.js';
+import { ROLES, promoted, promote, demote } from '../models.js';
 import { emit } from '../bus.js';
 
 const exec = promisify(execFile);
+const CH_HTTP = process.env.CLICKHOUSE_HTTP_URL;
 const CH = process.env.SIGNOZ_CLICKHOUSE_CONTAINER || 'signoz-telemetrystore-clickhouse-0-0';
 
+// Prefer the ClickHouse HTTP interface when configured (works without Docker,
+// with renamed containers and with remote ClickHouse); docker exec is the
+// zero-config default for a local SigNoz Foundry install.
 export async function ch(sql) {
-  const { stdout } = await exec('docker', ['exec', CH, 'clickhouse-client', '-q', `${sql} FORMAT JSON`]);
-  return JSON.parse(stdout).data;
+  if (CH_HTTP) {
+    const res = await fetch(CH_HTTP.replace(/\/$/, '') + '/', {
+      method: 'POST',
+      headers: {
+        ...(process.env.CLICKHOUSE_USER ? { 'X-ClickHouse-User': process.env.CLICKHOUSE_USER } : {}),
+        ...(process.env.CLICKHOUSE_PASSWORD ? { 'X-ClickHouse-Key': process.env.CLICKHOUSE_PASSWORD } : {})
+      },
+      body: `${sql} FORMAT JSON`
+    });
+    if (!res.ok) throw new Error(`ClickHouse HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`);
+    return (await res.json()).data;
+  }
+  try {
+    const { stdout } = await exec('docker', ['exec', CH, 'clickhouse-client', '-q', `${sql} FORMAT JSON`]);
+    return JSON.parse(stdout).data;
+  } catch (err) {
+    throw new Error(
+      `ClickHouse unreachable via docker exec on container "${CH}". ` +
+      'Set SIGNOZ_CLICKHOUSE_CONTAINER if your container has a different name, ' +
+      'or CLICKHOUSE_HTTP_URL (plus CLICKHOUSE_USER/CLICKHOUSE_PASSWORD if needed) to query over HTTP. ' +
+      `Cause: ${String(err.message || err).slice(0, 200)}`
+    );
+  }
 }
 
 // The doctor consumes what the swarm produces: SigNoz's trace store is the
@@ -21,16 +46,16 @@ export async function collectHealth(minutes = 180) {
         round(avg(durationNano)/1e9,1) AS avg_s, round(quantile(0.95)(durationNano)/1e9,1) AS p95_s,
         countIf(statusCode=2) AS errors,
         sum(attributes_number['gen_ai.usage.input_tokens'] + attributes_number['gen_ai.usage.output_tokens']) AS tokens
-        FROM signoz_traces.signoz_index_v3
+        FROM signoz_traces.distributed_signoz_index_v3
         WHERE serviceName='devswarm' AND name LIKE 'llm.%' AND ${since} GROUP BY role`),
     ch(`SELECT attributes_string['devswarm.role'] AS role, count() AS fallback_promotions
-        FROM signoz_traces.signoz_index_v3
+        FROM signoz_traces.distributed_signoz_index_v3
         WHERE serviceName='devswarm' AND arrayExists(e -> e LIKE '%fallback_promotion%', events) AND ${since} GROUP BY role`),
     ch(`SELECT count() AS generations,
         countIf(attributes_string['devswarm.generation.verdict']='pass') AS passed,
         sum(attributes_number['devswarm.generation.critic_catches']) AS critic_catches,
         sum(attributes_number['devswarm.generation.regenerations']) AS regenerations
-        FROM signoz_traces.signoz_index_v3
+        FROM signoz_traces.distributed_signoz_index_v3
         WHERE serviceName='devswarm' AND name='generation' AND ${since}`)
   ]);
   return { window_minutes: minutes, roles, fallbacks, generations: generations[0], promoted: { ...promoted } };
@@ -57,8 +82,8 @@ export async function diagnose(minutes = 180) {
   const applied = [];
   for (const a of verdict.actions || []) {
     if (!ROLES[a.role]) continue;
-    if (a.action === 'promote_fallback') { promoted[a.role] = ROLES[a.role].fallback; applied.push(a); }
-    if (a.action === 'reset_to_primary') { delete promoted[a.role]; applied.push(a); }
+    if (a.action === 'promote_fallback') { promote(a.role, ROLES[a.role].fallback, 'doctor'); applied.push(a); }
+    if (a.action === 'reset_to_primary') { demote(a.role); applied.push(a); }
   }
   const { slog } = await import('../telemetry.js');
   slog('info', `doctor diagnosis: ${verdict.summary}`, { applied: applied.length, findings: (verdict.findings || []).length });

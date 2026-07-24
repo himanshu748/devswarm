@@ -1,31 +1,26 @@
-import { NodeTracerProvider, BatchSpanProcessor, ConsoleSpanExporter } from '@opentelemetry/sdk-trace-node';
-import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
+import { createSwarm } from 'otel-swarm';
 import { MeterProvider, PeriodicExportingMetricReader } from '@opentelemetry/sdk-metrics';
 import { OTLPMetricExporter } from '@opentelemetry/exporter-metrics-otlp-http';
 import { LoggerProvider, BatchLogRecordProcessor } from '@opentelemetry/sdk-logs';
 import { OTLPLogExporter } from '@opentelemetry/exporter-logs-otlp-http';
 import { SeverityNumber } from '@opentelemetry/api-logs';
 import { Resource } from '@opentelemetry/resources';
-import { trace, metrics } from '@opentelemetry/api';
+import { metrics } from '@opentelemetry/api';
+import { emit } from './bus.js';
 
 const endpoint = process.env.SIGNOZ_OTLP_ENDPOINT;
 const url = (p) => `${endpoint.replace(/\/$/, '')}${p}`;
+
+// Traces come from otel-swarm, the library this project extracted; DevSwarm is
+// its first consumer. Metrics and logs stay local: the library scopes itself
+// to the trace + event-bus contract.
+export const swarm = createSwarm({ service: 'devswarm', version: '0.1.0', otlpEndpoint: endpoint });
+export const tracer = swarm.tracer;
 
 const resource = new Resource({
   'service.name': 'devswarm',
   'service.version': '0.1.0'
 });
-
-// Traces
-const provider = new NodeTracerProvider({
-  resource,
-  spanProcessors: [
-    new BatchSpanProcessor(
-      endpoint ? new OTLPTraceExporter({ url: url('/v1/traces') }) : new ConsoleSpanExporter()
-    )
-  ]
-});
-provider.register();
 
 // Metrics: the swarm's vitals as first-class time series, not just span math.
 if (endpoint) {
@@ -58,8 +53,22 @@ export function slog(severity, body, attributes = {}) {
   console.log(`[${severity}]`, body);
 }
 
+// The library mirrors every span into its event bus; forward that feed to the
+// process bus (SSE consumers) and derive the metrics + logs the library
+// deliberately leaves to its host.
+swarm.events.on('event', (e) => {
+  emit(e.type, e);
+  if (e.type === 'fallback') {
+    m.fallbacks.add(1, { role: e.role, from: e.from, to: e.to });
+    slog('warn', `fallback promoted for ${e.role}: ${e.from} -> ${e.to}`, {
+      role: e.role, from: e.from, to: e.to, reason: String(e.reason || '').slice(0, 200)
+    });
+  }
+  if (e.type === 'critic_catch') {
+    m.catches.add(1, { target: e.target, severity: e.severity });
+  }
+});
+
 if (!endpoint) {
   console.log('[telemetry] SIGNOZ_OTLP_ENDPOINT not set, spans go to console, metrics and logs disabled. Set it to e.g. http://localhost:4318');
 }
-
-export const tracer = trace.getTracer('devswarm');

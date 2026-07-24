@@ -1,6 +1,5 @@
-import { SpanStatusCode } from '@opentelemetry/api';
-import { tracer, m, slog } from './telemetry.js';
-import { ROLES, promoted, MODEL_MAX_TOKENS, DEFAULT_MAX_TOKENS } from './models.js';
+import { swarm, m, slog } from './telemetry.js';
+import { ROLES, promoted, promote, demote, FALLBACK_TTL_MS, MODEL_MAX_TOKENS, DEFAULT_MAX_TOKENS } from './models.js';
 import { emit } from './bus.js';
 
 const HF_URL = 'https://router.huggingface.co/v1/chat/completions';
@@ -13,9 +12,12 @@ function token() {
 
 // Streaming keeps bytes flowing on multi-minute codegen calls; buffered
 // responses sat idle past the router's gateway timeout and 504ed.
-async function callModel(model, messages, temperature, span) {
+async function callModel(model, messages, temperature) {
   const res = await fetch(HF_URL, {
     method: 'POST',
+    // Streaming defeats gateway timeouts, but a stalled stream would hang a
+    // generation forever; 15 minutes is past every p95 we have seen.
+    signal: AbortSignal.timeout(15 * 60 * 1000),
     headers: { Authorization: `Bearer ${token()}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
       model, messages, temperature,
@@ -52,10 +54,6 @@ async function callModel(model, messages, temperature, span) {
     }
   }
 
-  span.setAttributes({
-    'gen_ai.usage.input_tokens': usage.prompt_tokens ?? 0,
-    'gen_ai.usage.output_tokens': usage.completion_tokens ?? 0
-  });
   if (!content) content = reasoning;
   if (!content) throw new Error(`Empty completion from ${model} (finish: ${finish})`);
   // A truncated artifact is broken code; fail so the fallback (higher cap) takes over.
@@ -63,54 +61,51 @@ async function callModel(model, messages, temperature, span) {
   return { content, usage };
 }
 
-// One chat completion for a role, with fallback promotion on primary failure.
+// One chat completion for a role. The span, GenAI attributes, fallback-promotion
+// event and the mirrored bus events all come from otel-swarm's llm(); DevSwarm
+// layers its routing pins (TTL-bound) and per-call metrics on top.
 export async function chat(role, messages) {
   const cfg = ROLES[role];
-  return tracer.startActiveSpan(`llm.${role}`, async (span) => {
-    const model = promoted[role] || cfg.primary;
-    span.setAttributes({
-      'gen_ai.operation.name': 'chat',
-      'gen_ai.request.model': model,
-      'devswarm.role': role
-    });
-    const started = Date.now();
-    const traceId = span.spanContext().traceId;
-    emit('llm_start', { role, model, traceId });
-    const record = (usedModel, usage, outcome) => {
-      const tok = (usage.prompt_tokens ?? 0) + (usage.completion_tokens ?? 0);
-      m.tokens.add(tok, { role, model: usedModel });
-      m.llmCalls.add(1, { role, model: usedModel, outcome });
-      m.llmDuration.record((Date.now() - started) / 1000, { role, model: usedModel });
-    };
-    try {
-      const { content, usage } = await callModel(model, messages, cfg.temperature, span);
-      record(model, usage, 'ok');
-      emit('llm_end', { role, model, ms: Date.now() - started, in: usage.prompt_tokens ?? 0, out: usage.completion_tokens ?? 0, traceId });
-      span.end();
-      return content;
-    } catch (err) {
-      span.addEvent('fallback_promotion', { from: model, to: cfg.fallback, reason: String(err) });
-      span.setAttribute('gen_ai.request.model', cfg.fallback);
-      m.fallbacks.add(1, { role, from: model, to: cfg.fallback });
-      slog('warn', `fallback promoted for ${role}: ${model} -> ${cfg.fallback}`, { role, from: model, to: cfg.fallback, reason: String(err.message || err).slice(0, 200) });
-      emit('fallback', { role, from: model, to: cfg.fallback, reason: String(err.message || err) });
-      try {
-        const { content, usage } = await callModel(cfg.fallback, messages, cfg.temperature, span);
-        promoted[role] = cfg.fallback;
-        record(cfg.fallback, usage, 'ok_after_fallback');
-        emit('llm_end', { role, model: cfg.fallback, ms: Date.now() - started, in: usage.prompt_tokens ?? 0, out: usage.completion_tokens ?? 0, traceId });
-        span.end();
-        return content;
-      } catch (err2) {
-        span.setStatus({ code: SpanStatusCode.ERROR, message: String(err2) });
-        m.llmCalls.add(1, { role, model: cfg.fallback, outcome: 'error' });
-        slog('error', `llm call failed for ${role} on both primary and fallback`, { role, reason: String(err2.message || err2).slice(0, 200) });
-        emit('llm_error', { role, model: cfg.fallback, reason: String(err2.message || err2) });
-        span.end();
-        throw err2;
-      }
+  let first = cfg.primary;
+  const pin = promoted[role];
+  if (pin) {
+    if (Date.now() - pin.at > FALLBACK_TTL_MS) {
+      demote(role);
+      slog('info', `fallback TTL expired for ${role}, retrying primary ${cfg.primary}`, { role, from: pin.model, to: cfg.primary });
+      emit('fallback_reset', { role, from: pin.model, to: cfg.primary });
+    } else {
+      first = pin.model;
     }
-  });
+  }
+  // When a role is pinned to its fallback, the rescue path is the primary.
+  const second = first === cfg.fallback ? cfg.primary : cfg.fallback;
+  let lastTried = null;
+  const call = async (model) => {
+    lastTried = model;
+    const t0 = Date.now();
+    const { content, usage } = await callModel(model, messages, cfg.temperature);
+    const inTok = usage.prompt_tokens ?? 0;
+    const outTok = usage.completion_tokens ?? 0;
+    m.tokens.add(inTok + outTok, { role, model });
+    m.llmCalls.add(1, { role, model, outcome: model === first ? 'ok' : 'ok_after_fallback' });
+    m.llmDuration.record((Date.now() - t0) / 1000, { role, model });
+    return { content, inputTokens: inTok, outputTokens: outTok };
+  };
+  try {
+    const content = await swarm.llm(role, {
+      model: first,
+      fallbackModel: second,
+      call,
+      attributes: { 'devswarm.role': role }
+    });
+    if (lastTried === cfg.fallback && first !== cfg.fallback) promote(role, cfg.fallback, 'llm');
+    if (lastTried === cfg.primary && first === cfg.fallback) demote(role);
+    return content;
+  } catch (err) {
+    m.llmCalls.add(1, { role, model: lastTried, outcome: 'error' });
+    slog('error', `llm call failed for ${role} on both ${first} and ${second}`, { role, reason: String(err.message || err).slice(0, 200) });
+    throw err;
+  }
 }
 
 // Models often wrap JSON in prose or fences; pull out the first parseable object.
@@ -125,7 +120,12 @@ export function extractJson(text) {
 }
 
 export function extractCode(text, lang) {
-  const re = new RegExp('```(?:' + lang + ')?\\s*\\n([\\s\\S]*?)```');
-  const m = text.match(re);
-  return m ? m[1] : text;
+  // Models sometimes emit a short explanatory snippet before the full file;
+  // the longest fence is the artifact.
+  const re = new RegExp('```(?:' + lang + ')?\\s*\\n([\\s\\S]*?)```', 'g');
+  let best = null;
+  for (const match of text.matchAll(re)) {
+    if (!best || match[1].length > best.length) best = match[1];
+  }
+  return best ?? text;
 }
