@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>DevSwarm Mission Control</title>
+<link rel="icon" type="image/png" href="/favicon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
@@ -19,12 +20,13 @@
   }
   .mono { font-family:'JetBrains Mono',monospace; }
   :focus-visible { outline:2px solid var(--frontend); outline-offset:2px; }
+  a { color:inherit; }
 
   /* header */
-  header { display:flex; align-items:center; gap:20px; padding:14px 20px; border-bottom:1px solid var(--border); flex-wrap:wrap; }
-  .wordmark { font:700 15px 'Space Grotesk'; letter-spacing:0.22em; white-space:nowrap; }
+  header { display:flex; align-items:center; gap:16px; padding:12px 20px; border-bottom:1px solid var(--border); flex-wrap:wrap; }
+  .wordmark { font:700 15px 'Space Grotesk'; letter-spacing:0.22em; white-space:nowrap; text-decoration:none; }
   .wordmark em { font-style:normal; color:var(--dim); font-weight:500; }
-  form { flex:1; display:flex; gap:10px; max-width:720px; }
+  form { flex:1; display:flex; gap:10px; max-width:680px; }
   input#prompt {
     flex:1; background:var(--panel); border:1px solid var(--border); border-radius:8px;
     padding:9px 14px; color:var(--text); font-size:14px;
@@ -35,13 +37,16 @@
     padding:9px 20px; font:600 13px 'Inter'; letter-spacing:0.04em; cursor:pointer;
   }
   button#dispatch:disabled { background:var(--border); color:var(--dim); cursor:wait; }
-  #status { margin-left:auto; color:var(--dim); font-size:12px; display:flex; align-items:center; gap:8px; white-space:nowrap; }
+  .header-links { display:flex; gap:14px; margin-left:auto; align-items:center; }
+  .header-links a { color:var(--dim); font-size:12px; text-decoration:none; white-space:nowrap; }
+  .header-links a:hover { color:var(--text); }
+  #status { color:var(--dim); font-size:12px; display:flex; align-items:center; gap:8px; white-space:nowrap; }
   #status::before { content:''; width:7px; height:7px; border-radius:50%; background:var(--dim); }
   #status.live { color:var(--doctor); }
   #status.live::before { background:var(--doctor); }
 
   /* layout */
-  main { flex:1; display:grid; grid-template-columns:1fr 300px; grid-template-rows:1fr 220px; min-height:0; }
+  main { flex:1; display:grid; grid-template-columns:1fr 320px; grid-template-rows:minmax(0,1fr) 215px 148px; min-height:0; }
   section { border-right:1px solid var(--border); border-bottom:1px solid var(--border); min-height:0; position:relative; }
   .zone-title {
     position:absolute; top:10px; left:14px; z-index:3;
@@ -54,9 +59,7 @@
   #edges line { stroke:var(--border); stroke-width:1.5; }
   #edges line.flow { stroke-dasharray:6 8; animation:flow 0.8s linear infinite; }
   @keyframes flow { to { stroke-dashoffset:-14; } }
-  .node {
-    position:absolute; transform:translate(-50%,-50%); text-align:center; width:150px; z-index:2;
-  }
+  .node { position:absolute; transform:translate(-50%,-50%); text-align:center; width:150px; z-index:2; }
   .node .dot {
     width:52px; height:52px; border-radius:50%; margin:0 auto 6px;
     background:var(--panel); border:1.5px solid var(--border);
@@ -78,12 +81,18 @@
     background:color-mix(in srgb, var(--critic) 16%, transparent); color:var(--critic);
     font-size:9.5px; letter-spacing:0.06em;
   }
+  #hints { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
+  .hint-chip {
+    background:var(--panel); border:1px solid var(--border); border-radius:99px;
+    color:var(--dim); font-size:11px; padding:5px 12px; cursor:pointer; transition:color .15s, border-color .15s;
+  }
+  .hint-chip:hover { color:var(--text); border-color:var(--frontend); }
 
   /* trace river */
   #river { grid-row:2; grid-column:1; overflow-y:auto; padding:34px 14px 10px; }
   .empty { color:var(--dim); font-size:12px; padding:8px 2px; }
   .span-row { display:grid; grid-template-columns:190px 1fr; gap:10px; align-items:center; margin-bottom:5px; }
-  .span-name { font-size:11px; color:var(--dim); text-align:right; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .span-name { font-size:11px; color:var(--dim); text-align:right; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-decoration:none; }
   .span-track { position:relative; height:16px; }
   .span-bar {
     position:absolute; height:100%; border-radius:3px; min-width:3px;
@@ -91,9 +100,27 @@
   }
   .span-bar .t { position:absolute; left:calc(100% + 7px); top:-1px; font-size:10px; color:var(--dim); white-space:nowrap; }
 
+  /* hangar */
+  #hangar { grid-row:3; grid-column:1; display:flex; gap:10px; overflow-x:auto; overflow-y:hidden; padding:32px 14px 12px; align-items:stretch; }
+  .app-card {
+    min-width:212px; max-width:212px; background:var(--panel); border:1px solid var(--border);
+    border-radius:10px; padding:9px 12px; display:flex; flex-direction:column; gap:4px; font-size:11px;
+  }
+  .app-card .app-name { font-size:11.5px; font-weight:600; color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .app-card .meta { color:var(--dim); display:flex; gap:6px; align-items:center; }
+  .verdict { padding:0 7px; border-radius:99px; font-size:9.5px; letter-spacing:0.06em; text-transform:uppercase; }
+  .verdict.pass { background:color-mix(in srgb, var(--doctor) 16%, transparent); color:var(--doctor); }
+  .verdict.fail { background:color-mix(in srgb, var(--critic) 16%, transparent); color:var(--critic); }
+  .verdict.none { background:var(--border); color:var(--dim); }
+  .live-dot { width:6px; height:6px; border-radius:50%; background:var(--doctor); flex:none; }
+  .app-card .links { margin-top:auto; display:flex; gap:10px; }
+  .app-card .links a { color:var(--frontend); font-size:10.5px; font-weight:600; text-decoration:none; }
+  .app-card .links a.dim-link { color:var(--dim); font-weight:500; }
+
   /* vitals rail */
-  #rail { grid-row:1 / 3; grid-column:2; border-right:0; overflow-y:auto; padding:36px 14px 14px; display:flex; flex-direction:column; gap:16px; }
-  .vital-num { font:500 30px 'JetBrains Mono'; font-variant-numeric:tabular-nums; letter-spacing:-0.02em; }
+  #rail { grid-row:1 / 4; grid-column:2; border-right:0; overflow-y:auto; padding:36px 14px 14px; display:flex; flex-direction:column; gap:16px; }
+  .vitals-row { display:flex; gap:18px; }
+  .vital-num { font:500 26px 'JetBrains Mono'; font-variant-numeric:tabular-nums; letter-spacing:-0.02em; }
   .vital-label { font-size:10.5px; color:var(--dim); letter-spacing:0.12em; text-transform:uppercase; margin-top:2px; }
   .roles { display:flex; flex-direction:column; gap:7px; }
   .role-chip {
@@ -111,17 +138,31 @@
   .feed-item {
     padding:7px 10px; background:var(--panel); border:1px solid var(--border);
     border-left:2.5px solid var(--c, var(--border)); border-radius:6px; font-size:11px; color:var(--dim);
+    overflow-wrap:anywhere;
   }
   .feed-item b { color:var(--text); font-weight:500; }
   .feed-item a { color:var(--frontend); font-weight:600; text-decoration:none; }
+  #doctor-btn {
+    width:100%; background:color-mix(in srgb, var(--doctor) 16%, transparent); color:var(--doctor);
+    border:1px solid color-mix(in srgb, var(--doctor) 40%, transparent); border-radius:8px;
+    padding:8px 12px; font:600 12px 'Inter'; cursor:pointer;
+  }
+  #doctor-btn:disabled { opacity:0.55; cursor:wait; }
+  #doctor-card {
+    display:none; margin-top:8px; padding:10px 12px; background:var(--panel);
+    border:1px solid var(--border); border-left:2.5px solid var(--doctor); border-radius:8px;
+    font-size:11.5px; color:var(--dim);
+  }
+  #doctor-card b { color:var(--text); }
 
   @media (max-width:900px) {
     body { overflow:auto; height:auto; }
     main { display:flex; flex-direction:column; }
     #graph { height:380px; }
+    #river { min-height:180px; }
     #rail { grid-row:auto; }
     form { flex-basis:100%; order:3; max-width:none; }
-    #status { margin-left:0; }
+    .header-links { margin-left:0; }
   }
   @media (max-width:480px) {
     .wordmark em { display:none; }
@@ -131,7 +172,7 @@
     .node { width:110px; }
     .node .dot { width:44px; height:44px; }
     .node .sub { font-size:9.5px; }
-    .vital-num { font-size:24px; }
+    .vital-num { font-size:22px; }
     #graph { height:330px; }
   }
   @media (prefers-reduced-motion: reduce) {
@@ -143,12 +184,15 @@
 <body>
 
 <header>
-  <a class="wordmark" href="/" style="color:inherit;text-decoration:none">DEVSWARM <em>// MISSION CONTROL</em></a>
+  <a class="wordmark" href="/">DEVSWARM <em>// MISSION CONTROL</em></a>
   <form id="f">
     <input id="prompt" placeholder="Build me a habit-tracker app" autocomplete="off">
     <button id="dispatch">Dispatch</button>
   </form>
-  <div id="status">swarm idle</div>
+  <div class="header-links">
+    <a id="signoz-link" href="http://localhost:8080" target="_blank">SigNoz &#8599;</a>
+    <div id="status">swarm idle</div>
+  </div>
 </header>
 
 <main>
@@ -159,24 +203,36 @@
 
   <section id="river">
     <div class="zone-title">Trace river</div>
-    <div class="empty" id="river-empty">no spans yet, dispatch a prompt</div>
+    <div class="empty" id="river-empty">no spans yet, try one of these:
+      <div id="hints"></div>
+    </div>
+  </section>
+
+  <section id="hangar">
+    <div class="zone-title">Hangar</div>
   </section>
 
   <section id="rail">
     <div class="zone-title">Vitals</div>
-    <div>
-      <div class="vital-num mono" id="tokens">0</div>
-      <div class="vital-label">tokens this generation</div>
-    </div>
-    <div>
-      <div class="vital-num mono" id="catches" style="color:var(--critic)">0</div>
-      <div class="vital-label">critic catches</div>
+    <div class="vitals-row">
+      <div>
+        <div class="vital-num mono" id="tokens">0</div>
+        <div class="vital-label">tokens this run</div>
+      </div>
+      <div>
+        <div class="vital-num mono" id="catches" style="color:var(--critic)">0</div>
+        <div class="vital-label">critic catches</div>
+      </div>
+      <div>
+        <div class="vital-num mono" id="elapsed">0:00</div>
+        <div class="vital-label">elapsed</div>
+      </div>
     </div>
     <div class="roles" id="roles"></div>
     <div>
       <div class="vital-label" style="margin-bottom:8px">Swarm doctor</div>
-      <button id="doctor-btn" style="width:100%;background:color-mix(in srgb, var(--doctor) 16%, transparent);color:var(--doctor);border:1px solid color-mix(in srgb, var(--doctor) 40%, transparent);border-radius:8px;padding:8px 12px;font:600 12px 'Inter';cursor:pointer">Run diagnosis</button>
-      <div id="doctor-card" style="display:none;margin-top:8px;padding:10px 12px;background:var(--panel);border:1px solid var(--border);border-left:2.5px solid var(--doctor);border-radius:8px;font-size:11.5px;color:var(--dim)"></div>
+      <button id="doctor-btn">Run diagnosis</button>
+      <div id="doctor-card"></div>
     </div>
     <div>
       <div class="vital-label" style="margin-bottom:8px">Feed</div>
@@ -185,14 +241,22 @@
   </section>
 </main>
 
+<script type="module">
+import { animate, stagger } from '/vendor/anime.esm.min.js';
+if (!matchMedia('(prefers-reduced-motion: reduce)').matches) window.fx = { animate, stagger };
+</script>
 <script>
 const ROLES = ['planner','frontend','backend','critic'];
+const CHIP_ROLES = ['planner','frontend','backend','critic','doctor'];
 const POS = { planner:[50,16], frontend:[24,54], backend:[76,54], critic:[50,86] };
 const EDGES = [['planner','frontend'],['planner','backend'],['frontend','critic'],['backend','critic']];
 const graph = document.getElementById('graph');
 const svg = document.getElementById('edges');
 const nodes = {}, edgeEls = {}, roleTokens = {}, roleModels = {};
-let totalTokens = 0, genStart = 0, timers = {};
+let totalTokens = 0, genStart = 0, timers = {}, elapsedTimer = null, generationLive = false;
+
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+const short = (model) => esc(String(model || '').split('/').pop());
 
 for (const [a,b] of EDGES) {
   const l = document.createElementNS('http://www.w3.org/2000/svg','line');
@@ -208,26 +272,39 @@ for (const r of ROLES) {
   graph.appendChild(n); nodes[r] = n;
 }
 
+const HINTS = ['a plant watering tracker', 'a book club voting app', 'a landing page for a coffee roastery', 'a workout log with PRs'];
+const hintBox = document.getElementById('hints');
+for (const h of HINTS) {
+  const b = document.createElement('button');
+  b.className = 'hint-chip'; b.type = 'button'; b.textContent = h;
+  b.addEventListener('click', () => {
+    document.getElementById('prompt').value = 'Build me ' + h;
+    document.getElementById('prompt').focus();
+  });
+  hintBox.appendChild(b);
+}
+
 function chip(role, model, fb) {
-  roleModels[role] = { model, fb };
-  document.getElementById('roles').innerHTML = ROLES.map(r => {
+  if (role) roleModels[role] = { model, fb };
+  document.getElementById('roles').innerHTML = CHIP_ROLES.map(r => {
     const m = roleModels[r];
     return `<div class="role-chip mono" style="--c:var(--${r})">
       <span class="swatch"></span><span class="rname">${r}</span>
-      <span class="model">${m ? m.model.split('/')[1] : 'standby'}</span>
+      <span class="model">${m ? short(m.model) : 'standby'}</span>
       ${m && m.fb ? '<span class="badge">FALLBACK</span>' : ''}</div>`;
   }).join('');
 }
 chip();
 
-function feed(text, color, html) {
+function feed(color, html) {
   const f = document.getElementById('feed');
   if (f.firstElementChild?.classList.contains('empty')) f.innerHTML = '';
   const d = document.createElement('div');
   d.className = 'feed-item'; if (color) d.style.setProperty('--c', `var(--${color})`);
-  d.innerHTML = html || text;
+  d.innerHTML = html;
   f.prepend(d);
-  while (f.children.length > 8) f.lastChild.remove();
+  window.fx?.animate(d, { opacity: [0, 1], translateX: [10, 0], duration: 350, ease: 'outCubic' });
+  while (f.children.length > 12) f.lastChild.remove();
 }
 
 function setStatus(t, live) {
@@ -235,33 +312,44 @@ function setStatus(t, live) {
   s.textContent = t; s.classList.toggle('live', !!live);
 }
 
+function tickElapsed() {
+  const s = Math.floor((Date.now() - genStart) / 1000);
+  document.getElementById('elapsed').textContent = `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`;
+}
+
 function activate(role, model) {
+  if (!nodes[role]) return;
   nodes[role].classList.add('active');
   for (const k in edgeEls) if (k.includes(role)) edgeEls[k].classList.add('flow');
   const started = Date.now();
   timers[role] = setInterval(() => {
     document.getElementById('sub-'+role).innerHTML =
-      `<b>${model.split('/')[1]}</b>${((Date.now()-started)/1000).toFixed(0)}s · ${(roleTokens[role]||0).toLocaleString()} tok`;
+      `<b>${short(model)}</b>${((Date.now()-started)/1000).toFixed(0)}s · ${(roleTokens[role]||0).toLocaleString()} tok`;
   }, 250);
 }
 function deactivate(role) {
+  if (!nodes[role]) return;
   nodes[role].classList.remove('active');
   for (const k in edgeEls) if (k.includes(role)) edgeEls[k].classList.remove('flow');
   clearInterval(timers[role]);
 }
 
 const bars = {};
-const SIGNOZ_URL = 'http://localhost:8080';
+let SIGNOZ_URL = 'http://localhost:8080';
+fetch('/api/config').then((r) => r.json()).then((c) => {
+  if (c.signozUrl) { SIGNOZ_URL = c.signozUrl; document.getElementById('signoz-link').href = SIGNOZ_URL; }
+}).catch(() => {});
+
 function spanStart(role, model, traceId) {
   document.getElementById('river-empty')?.remove();
   const river = document.getElementById('river');
   const row = document.createElement('div');
   row.className = 'span-row';
   const name = traceId
-    ? `<a class="span-name mono" href="${SIGNOZ_URL}/trace/${traceId}" target="_blank" title="Open this trace in SigNoz" style="color:inherit;text-decoration:none">llm.${role} · ${model.split('/')[1]} ↗</a>`
-    : `<div class="span-name mono">llm.${role} · ${model.split('/')[1]}</div>`;
+    ? `<a class="span-name mono" href="${SIGNOZ_URL}/trace/${esc(traceId)}" target="_blank" title="Open this trace in SigNoz">llm.${esc(role)} · ${short(model)} &#8599;</a>`
+    : `<div class="span-name mono">llm.${esc(role)} · ${short(model)}</div>`;
   row.innerHTML = `${name}
-    <div class="span-track"><div class="span-bar" style="--c:var(--${role})"><span class="t mono"></span></div></div>`;
+    <div class="span-track"><div class="span-bar" style="--c:var(--${esc(role)})"><span class="t mono"></span></div></div>`;
   river.appendChild(row); river.scrollTop = river.scrollHeight;
   const bar = row.querySelector('.span-bar');
   const t0 = Date.now();
@@ -284,60 +372,119 @@ function spanEnd(role, ms, tokens) {
 function relabelSpan(role, model) {
   const row = bars[role]?.bar.closest('.span-row');
   const name = row?.querySelector('.span-name');
-  if (name) name.textContent = `llm.${role} · ${model.split('/')[1]} ⚡`;
+  if (name) name.textContent = `llm.${role} · ${String(model || '').split('/').pop()} ⚡`;
 }
+
+// Hangar: every app the swarm has built, newest first.
+async function loadHangar() {
+  try {
+    const { apps } = await (await fetch('/api/generations')).json();
+    const hangar = document.getElementById('hangar');
+    hangar.querySelectorAll('.app-card, .empty').forEach((el) => el.remove());
+    if (!apps.length) {
+      hangar.insertAdjacentHTML('beforeend', '<div class="empty">nothing built yet</div>');
+      return;
+    }
+    for (const a of apps) {
+      const v = a.verdict ?? 'none';
+      const card = document.createElement('div');
+      card.className = 'app-card';
+      card.innerHTML = `
+        <div class="app-name mono" title="${esc(a.id)}">${esc(a.id)}</div>
+        <div class="meta">
+          <span class="verdict ${esc(v)}">${esc(a.verdict ?? 'no review')}</span>
+          ${a.catches != null ? `<span>${a.catches} catches · ${a.regenerations} regen</span>` : ''}
+          ${a.running ? '<span class="live-dot" title="backend running"></span>' : ''}
+        </div>
+        <div class="links">
+          <a href="/preview/${esc(a.id)}/" target="_blank">Preview &#8599;</a>
+          <a class="dim-link" href="${SIGNOZ_URL}/services/${esc(a.id)}" target="_blank" title="This app's own traces in SigNoz">SigNoz &#8599;</a>
+        </div>`;
+      hangar.appendChild(card);
+    }
+    window.fx?.animate('#hangar .app-card', {
+      opacity: [0, 1], translateY: [10, 0], delay: window.fx.stagger(50), duration: 400, ease: 'outCubic'
+    });
+  } catch { /* hangar is decorative when the API is down */ }
+}
+loadHangar();
 
 const es = new EventSource('/api/events');
 document.getElementById('doctor-btn').addEventListener('click', async () => {
   const btn = document.getElementById('doctor-btn');
   btn.disabled = true; btn.textContent = 'Reading traces...';
-  try { await fetch('/api/doctor/run', { method: 'POST' }); }
-  catch { feed('', 'critic', '<b>doctor</b> diagnosis failed'); }
+  try {
+    const res = await fetch('/api/doctor/run', { method: 'POST' });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      feed('critic', `<b>doctor failed</b> ${esc(String(body.error || res.status).slice(0, 120))}`);
+    }
+  } catch (err) {
+    feed('critic', `<b>doctor failed</b> ${esc(String(err.message || err).slice(0, 120))}`);
+  }
   btn.disabled = false; btn.textContent = 'Run diagnosis';
 });
 
-es.onmessage = (m) => {
-  const e = JSON.parse(m.data);
+es.onmessage = (msg) => {
+  const e = JSON.parse(msg.data);
   if (e.type === 'llm_start') { activate(e.role, e.model); chip(e.role, e.model, roleModels[e.role]?.fb); spanStart(e.role, e.model, e.traceId); }
   if (e.type === 'llm_end') {
     roleTokens[e.role] = (roleTokens[e.role]||0) + e.in + e.out;
-    totalTokens += e.in + e.out;
-    document.getElementById('tokens').textContent = totalTokens.toLocaleString();
+    if (nodes[e.role] && generationLive) {
+      totalTokens += e.in + e.out;
+      document.getElementById('tokens').textContent = totalTokens.toLocaleString();
+      window.fx?.animate('#tokens', { scale: [1.08, 1], duration: 320, ease: 'outQuad' });
+    }
     deactivate(e.role); spanEnd(e.role, e.ms, e.in + e.out);
     const sub = document.getElementById('sub-'+e.role);
-    if (sub) sub.innerHTML = `<b>${e.model.split('/')[1]}</b>${(e.ms/1000).toFixed(0)}s · ${(roleTokens[e.role]||0).toLocaleString()} tok`;
+    if (sub) sub.innerHTML = `<b>${short(e.model)}</b>${(e.ms/1000).toFixed(0)}s · ${(roleTokens[e.role]||0).toLocaleString()} tok`;
   }
-  if (e.type === 'fallback') { chip(e.role, e.to, true); relabelSpan(e.role, e.to); feed('', e.role, `<b>fallback promoted</b> ${e.role}: ${e.to.split('/')[1]}`); }
+  if (e.type === 'fallback') { chip(e.role, e.to, true); relabelSpan(e.role, e.to); feed(e.role, `<b>fallback promoted</b> ${esc(e.role)}: ${short(e.to)}`); }
+  if (e.type === 'fallback_reset') { chip(e.role, e.to, false); feed(e.role, `<b>fallback expired</b> ${esc(e.role)} back on ${short(e.to)}`); }
   if (e.type === 'critic_catch') {
     const n = +document.getElementById('catches').textContent + 1;
     document.getElementById('catches').textContent = n;
     nodes[e.target]?.classList.add('flagged');
     const sub = document.getElementById('sub-'+e.target);
     if (sub && !sub.querySelector('.flag')) sub.insertAdjacentHTML('beforeend','<span class="flag">flagged</span>');
-    feed('', 'critic', `<b>critic flagged ${e.target}</b> ${e.description.slice(0,90)}`);
+    feed('critic', `<b>critic flagged ${esc(e.target)}</b> ${esc(String(e.description || '').slice(0,90))}`);
   }
   if (e.type === 'stage') {
+    // A run dispatched from anywhere (another tab, curl, the API) still arms
+    // this tab's vitals; the planning stage is the start-of-run signal.
+    if (e.stage === 'planning' && !generationLive) {
+      genStart = Date.now(); totalTokens = 0; generationLive = true;
+      clearInterval(elapsedTimer); elapsedTimer = setInterval(tickElapsed, 1000); tickElapsed();
+      document.getElementById('tokens').textContent = '0';
+      document.getElementById('catches').textContent = '0';
+    }
     setStatus(e.stage + (e.attempt ? ' '+e.attempt : ''), true);
     if (e.stage === 'regenerating') ROLES.forEach(r => nodes[r].classList.remove('flagged'));
-    if (e.stage === 'planned') feed('', 'planner', `<b>plan locked</b> ${e.plan.name}: ${e.plan.api.length} endpoints`);
+    if (e.stage === 'planned') feed('planner', `<b>plan locked</b> ${esc(e.plan.name)}: ${e.plan.api.length} endpoints`);
   }
   if (e.type === 'doctor_diagnosis') {
     const card = document.getElementById('doctor-card');
     card.style.display = 'block';
-    card.innerHTML = `<b style="color:var(--text)">${e.summary}</b>` +
-      (e.applied?.length ? '<div style="margin-top:6px">' + e.applied.map(a => `→ ${a.action.replace('_',' ')} for ${a.role}: ${a.reason}`).join('<br>') + '</div>' : '<div style="margin-top:6px">no routing changes needed</div>');
-    feed('', 'doctor', `<b>doctor</b> ${e.summary.slice(0,90)}`);
+    card.innerHTML = `<b>${esc(e.summary)}</b>` +
+      (e.applied?.length
+        ? '<div style="margin-top:6px">' + e.applied.map(a => `&rarr; ${esc(a.action.replace('_',' '))} for ${esc(a.role)}: ${esc(a.reason)}`).join('<br>') + '</div>'
+        : '<div style="margin-top:6px">no routing changes needed</div>');
+    feed('doctor', `<b>doctor</b> ${esc(String(e.summary || '').slice(0,90))}`);
   }
   if (e.type === 'done') {
     setStatus('swarm idle');
+    generationLive = false; clearInterval(elapsedTimer);
     document.getElementById('dispatch').disabled = false;
     ROLES.forEach(r => { deactivate(r); nodes[r].classList.remove('flagged'); });
-    feed('', 'doctor', `<b>${e.verdict}</b> · ${e.regenerations} regens · ${e.catches} catches · <a href="${e.preview}" target="_blank">open ${e.name}</a>`);
+    feed('doctor', `<b>${esc(e.verdict)}</b> · ${e.regenerations} regens · ${e.catches} catches · <a href="${esc(e.preview)}" target="_blank">open ${esc(e.name)}</a>`);
+    loadHangar();
   }
   if (e.type === 'generation_error' || e.type === 'llm_error') {
-    setStatus('error'); document.getElementById('dispatch').disabled = false;
+    setStatus('error');
+    generationLive = false; clearInterval(elapsedTimer);
+    document.getElementById('dispatch').disabled = false;
     ROLES.forEach(deactivate);
-    feed('', 'critic', `<b>error</b> ${e.reason?.slice(0,110) || ''}`);
+    feed('critic', `<b>error</b> ${esc(String(e.reason || '').slice(0,110))}`);
   }
 };
 
@@ -345,7 +492,8 @@ document.getElementById('f').addEventListener('submit', (ev) => {
   ev.preventDefault();
   const prompt = document.getElementById('prompt').value.trim();
   if (!prompt) return;
-  genStart = Date.now(); totalTokens = 0;
+  genStart = Date.now(); totalTokens = 0; generationLive = true;
+  clearInterval(elapsedTimer); elapsedTimer = setInterval(tickElapsed, 1000); tickElapsed();
   for (const r of ROLES) { roleTokens[r] = 0; document.getElementById('sub-'+r).innerHTML=''; }
   document.getElementById('tokens').textContent = '0';
   document.getElementById('catches').textContent = '0';

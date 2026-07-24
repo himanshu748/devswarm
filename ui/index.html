@@ -5,6 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#000000">
 <meta name="description" content="DevSwarm turns a prompt into a full-stack app using a swarm of specialized open models, review-gated and fully traced into SigNoz.">
+<link rel="icon" type="image/png" href="/favicon.png">
+<meta property="og:title" content="DevSwarm, the swarm that watches itself">
+<meta property="og:description" content="One prompt in, a reviewed full-stack app out. Four open models, a critic gate, and every step traced into SigNoz.">
+<meta property="og:image" content="/og.png">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="/og.png">
 <title>DevSwarm, the swarm that watches itself</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -190,10 +197,10 @@
     <div class="wrap">
       <span class="lbl">The swarm</span>
       <span class="chip" style="--c:var(--planner)">GLM-5.2</span>
-      <span class="chip" style="--c:var(--backend)">Qwen3-Coder-480B</span>
       <span class="chip" style="--c:var(--frontend)">Kimi K2.6</span>
-      <span class="chip" style="--c:var(--backend)">Kimi K2.7 Code</span>
+      <span class="chip" style="--c:var(--backend)">Qwen3-Coder-480B</span>
       <span class="chip" style="--c:var(--critic)">DeepSeek-V4</span>
+      <span class="chip" style="--c:var(--doctor)">Qwen3.6-35B</span>
       <span class="lbl" style="margin-left:auto">served via Hugging Face</span>
     </div>
   </div>
@@ -321,6 +328,36 @@
     if (live) live.textContent = `live from SigNoz · ${s.generations} generations · ${s.llm_calls} traced LLM calls across ${s.models} models`;
   } catch { /* static fallbacks already rendered */ }
 })();
+</script>
+<script type="module">
+import { animate, stagger } from '/vendor/anime.esm.min.js';
+if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
+  const q = (s) => [...document.querySelectorAll(s)];
+  animate(q('.hero .eyebrow, .hero h1, .hero p.sub, .hero .ctas'), {
+    opacity: [0, 1], translateY: [18, 0], delay: stagger(90), duration: 700, ease: 'outCubic'
+  });
+  animate(q('.strip .chip, .strip .lbl'), {
+    opacity: [0, 1], translateY: [8, 0], delay: stagger(55, { start: 350 }), duration: 500, ease: 'outCubic'
+  });
+  const reveal = (els) => {
+    const io = new IntersectionObserver((entries) => {
+      for (const en of entries) {
+        if (!en.isIntersecting) continue;
+        const el = en.target;
+        const siblings = [...el.parentNode.children].filter((c) => c.classList.contains(el.classList[0]));
+        animate(el, {
+          opacity: [0, 1], translateY: [22, 0], duration: 650, ease: 'outCubic',
+          delay: Math.max(0, siblings.indexOf(el)) * 80
+        });
+        io.unobserve(el);
+      }
+    }, { threshold: 0.2 });
+    els.forEach((el) => { el.style.opacity = '0'; io.observe(el); });
+  };
+  reveal(q('.grid4 .cell'));
+  reveal(q('.grid2 .card'));
+  reveal(q('section.block .kicker, section.block h2, section.block p.lead, .fin h2, .fin p, .fin .ctas'));
+}
 </script>
 </body>
 </html>
