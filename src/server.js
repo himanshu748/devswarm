@@ -66,7 +66,9 @@ app.get('/api/apps', (_req, res) => res.json({ running: runningApps() }));
 // Mission Control's hangar renders this so past builds stay one click away.
 app.get('/api/generations', async (_req, res) => {
   try {
-    const entries = await readdir(path.resolve('generated'), { withFileTypes: true });
+    // generated/ is gitignored, so a fresh clone has none until the first build.
+    const entries = await readdir(path.resolve('generated'), { withFileTypes: true })
+      .catch((err) => { if (err.code === 'ENOENT') return []; throw err; });
     const apps = await Promise.all(entries.filter((d) => d.isDirectory()).map(async (d) => {
       const dir = path.resolve('generated', d.name);
       const info = await stat(dir);
