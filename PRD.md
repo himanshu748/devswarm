@@ -33,6 +33,8 @@ Tools like Lovable, Bolt, and v0 let non/semi-technical users generate full apps
 
 Seven agent roles, each backed by the open-weight model currently strongest for that job (model landscape shifts fast — this table should be re-verified against current HF Inference Providers availability at build time, not treated as fixed):
 
+> Shipped routing differs from this research table and is measured rather than assumed. See the routing section in [README.md](README.md) for what actually runs, and the blog post for the benchmarks behind the critic and frontend choices.
+
 | Role | Primary model (as of research, mid-2026) | Fallback | Why |
 |---|---|---|---|
 | **Planner/PRD agent** | Qwen3.6-Plus (Apache-2.0, 1M ctx) | DeepSeek-V4-Pro | Best tool-calling reliability + long-context task decomposition; turns a user prompt into a structured build plan and routes subtasks to the other agents. |

@@ -4,3 +4,9 @@ generated/
 media/
 graphify-out/
 videos/
+.DS_Store
+
+# blog image variants generated for hosting, not source
+docs/blog-images/web/
+# abandoned TTS voiceover attempt, demo is recorded by hand
+assets/voice/
