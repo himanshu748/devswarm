@@ -37,6 +37,17 @@
     padding:9px 20px; font:600 13px 'Inter'; letter-spacing:0.04em; cursor:pointer;
   }
   button#dispatch:disabled { background:var(--border); color:var(--dim); cursor:wait; }
+  form.refining button#dispatch { background:var(--doctor); color:#052B14; }
+  #refine-tag {
+    display:flex; align-items:center; flex:none; padding:0 10px; height:36px; border-radius:8px;
+    background:color-mix(in srgb, var(--doctor) 14%, transparent); color:var(--doctor);
+    border:1px solid color-mix(in srgb, var(--doctor) 34%, transparent); font-size:11px; white-space:nowrap;
+  }
+  button#cancel-refine {
+    flex:none; background:none; border:1px solid var(--border); color:var(--dim);
+    border-radius:8px; padding:0 14px; font:500 12px 'Inter'; cursor:pointer;
+  }
+  button#cancel-refine:hover { color:var(--text); border-color:var(--dim); }
   .header-links { display:flex; gap:14px; margin-left:auto; align-items:center; }
   .header-links a { color:var(--dim); font-size:12px; text-decoration:none; white-space:nowrap; }
   .header-links a:hover { color:var(--text); }
@@ -186,8 +197,10 @@
 <header>
   <a class="wordmark" href="/">DEVSWARM <em>// MISSION CONTROL</em></a>
   <form id="f">
+    <span id="refine-tag" class="mono" hidden></span>
     <input id="prompt" placeholder="Build me a habit-tracker app" autocomplete="off">
     <button id="dispatch">Dispatch</button>
+    <button id="cancel-refine" type="button" hidden>Cancel</button>
   </form>
   <div class="header-links">
     <a id="signoz-link" href="http://localhost:8080" target="_blank">SigNoz &#8599;</a>
@@ -394,12 +407,18 @@ async function loadHangar() {
         <div class="meta">
           <span class="verdict ${esc(v)}">${esc(a.verdict ?? 'no review')}</span>
           ${a.catches != null ? `<span>${a.catches} catches · ${a.regenerations} regen</span>` : ''}
+          ${a.refinements ? `<span title="${esc(a.last_change || '')}">· ${a.refinements} refined</span>` : ''}
           ${a.running ? '<span class="live-dot" title="backend running"></span>' : ''}
         </div>
         <div class="links">
           <a href="/preview/${esc(a.id)}/" target="_blank">Preview &#8599;</a>
+          ${a.refinable ? `<a class="dim-link refine-link" href="#" data-id="${esc(a.id)}">Refine</a>` : ''}
           <a class="dim-link" href="${SIGNOZ_URL}/services/${esc(a.id)}" target="_blank" title="This app's own traces in SigNoz">SigNoz &#8599;</a>
         </div>`;
+      card.querySelector('.refine-link')?.addEventListener('click', (ev) => {
+        ev.preventDefault();
+        enterRefineMode(a.id);
+      });
       hangar.appendChild(card);
     }
     window.fx?.animate('#hangar .app-card', {
@@ -408,6 +427,34 @@ async function loadHangar() {
   } catch { /* hangar is decorative when the API is down */ }
 }
 loadHangar();
+
+// The one input serves both modes: a new build, or a scoped edit to an app the
+// swarm already shipped.
+let refineTarget = null;
+function enterRefineMode(id) {
+  refineTarget = id;
+  const form = document.getElementById('f');
+  const tag = document.getElementById('refine-tag');
+  form.classList.add('refining');
+  tag.textContent = 'refining ' + id;
+  tag.hidden = false;
+  document.getElementById('cancel-refine').hidden = false;
+  document.getElementById('dispatch').textContent = 'Refine';
+  const input = document.getElementById('prompt');
+  input.placeholder = 'Make the hero darker and add a status filter';
+  input.value = '';
+  input.focus();
+}
+function exitRefineMode() {
+  refineTarget = null;
+  const form = document.getElementById('f');
+  form.classList.remove('refining');
+  document.getElementById('refine-tag').hidden = true;
+  document.getElementById('cancel-refine').hidden = true;
+  document.getElementById('dispatch').textContent = 'Dispatch';
+  document.getElementById('prompt').placeholder = 'Build me a habit-tracker app';
+}
+document.getElementById('cancel-refine').addEventListener('click', exitRefineMode);
 
 const es = new EventSource('/api/events');
 document.getElementById('doctor-btn').addEventListener('click', async () => {
@@ -461,6 +508,17 @@ es.onmessage = (msg) => {
     setStatus(e.stage + (e.attempt ? ' '+e.attempt : ''), true);
     if (e.stage === 'regenerating') ROLES.forEach(r => nodes[r].classList.remove('flagged'));
     if (e.stage === 'planned') feed('planner', `<b>plan locked</b> ${esc(e.plan.name)}: ${e.plan.api.length} endpoints`);
+    if (e.stage === 'scoped') {
+      feed('planner', `<b>scoped to ${esc((e.targets || []).join(' + '))}</b>${e.contract_changed ? ' · contract changed' : ''} · ${esc(String(e.change || '').slice(0, 70))}`);
+    }
+  }
+  if (e.type === 'refined') {
+    setStatus('swarm idle');
+    generationLive = false; clearInterval(elapsedTimer);
+    document.getElementById('dispatch').disabled = false;
+    ROLES.forEach(r => { deactivate(r); nodes[r].classList.remove('flagged'); });
+    feed('doctor', `<b>${esc(e.verdict)}</b> · refinement ${e.refinement} · ${esc((e.targets || []).join(' + '))} · <a href="${esc(e.preview)}" target="_blank">open ${esc(e.name)}</a>`);
+    loadHangar();
   }
   if (e.type === 'doctor_diagnosis') {
     const card = document.getElementById('doctor-card');
@@ -499,6 +557,24 @@ document.getElementById('f').addEventListener('submit', (ev) => {
   document.getElementById('catches').textContent = '0';
   document.getElementById('river').innerHTML = '<div class="zone-title">Trace river</div>';
   document.getElementById('dispatch').disabled = true;
+  if (refineTarget) {
+    setStatus('scoping refinement', true);
+    const id = refineTarget;
+    feed('planner', `<b>refining</b> ${esc(id)}: ${esc(prompt.slice(0, 70))}`);
+    fetch('/api/refine', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ id, instruction: prompt }) })
+      .then((r) => r.json())
+      .then((r) => {
+        if (r.error) throw new Error(r.error);
+        exitRefineMode();
+        document.getElementById('prompt').value = '';
+      })
+      .catch((err) => {
+        setStatus('error');
+        document.getElementById('dispatch').disabled = false;
+        feed('critic', `<b>refine failed</b> ${esc(String(err.message || err).slice(0, 110))}`);
+      });
+    return;
+  }
   setStatus('dispatching', true);
   fetch('/api/generate', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ prompt }) })
     .catch(() => setStatus('error'));

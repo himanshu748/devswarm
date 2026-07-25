@@ -1,10 +1,11 @@
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, writeFile, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { swarm, m, slog } from './telemetry.js';
 import { emit } from './bus.js';
-import { plan } from './agents/planner.js';
-import { generateFrontend } from './agents/frontend.js';
-import { generateBackend } from './agents/backend.js';
+import { stopApp } from './apps.js';
+import { plan, planRefinement } from './agents/planner.js';
+import { generateFrontend, refineFrontend } from './agents/frontend.js';
+import { generateBackend, refineBackend } from './agents/backend.js';
 import { review } from './agents/critic.js';
 
 const MAX_REGEN = 2;
@@ -177,6 +178,9 @@ export async function generate(prompt, onEvent = () => {}) {
       await writeFile(path.join(dir, 'package.json'), appPackageJson(id, buildPlan));
       await writeFile(path.join(dir, 'README.md'), appReadme(id, buildPlan));
       await writeFile(path.join(dir, 'signoz-dashboard.json'), JSON.stringify(appDashboard(id, buildPlan), null, 2));
+      // The plan is the shared contract; persisting it is what makes a later
+      // refinement a scoped edit instead of a guess at the original intent.
+      await writeFile(path.join(dir, 'plan.json'), JSON.stringify(buildPlan, null, 2));
       const dash = await provisionDashboard(id, buildPlan);
       if (dash.provisioned) {
         slog('info', `provisioned SigNoz dashboard for generated app ${id}`, { 'devswarm.generation.id': id });
@@ -184,7 +188,7 @@ export async function generate(prompt, onEvent = () => {}) {
       }
       await writeFile(
         path.join(dir, 'review.json'),
-        JSON.stringify({ verdict: verdict.verdict, regenerations: attempts, catches }, null, 2)
+        JSON.stringify({ verdict: verdict.verdict, regenerations: attempts, catches, refinements: [] }, null, 2)
       );
 
       root.setAttributes({
@@ -198,5 +202,103 @@ export async function generate(prompt, onEvent = () => {}) {
         'devswarm.generation.id': id, verdict: verdict.verdict, catches: catches.length, regenerations: attempts
       });
       return { id, plan: buildPlan, verdict: verdict.verdict, regenerations: attempts, catches };
+  });
+}
+
+// Refinement: an existing app plus one instruction. The planner scopes which
+// agents re-run, only those run, and the critic still gates the result. Traced
+// as its own root span so a refinement is as answerable as a build.
+export async function refine(id, instruction, onEvent = () => {}) {
+  const notify = (e) => { onEvent(e); emit('stage', { ...e, id }); };
+  if (!/^[a-z0-9-]{1,60}$/i.test(id)) throw new Error('invalid app id');
+  const dir = path.join(GENERATED_DIR, id);
+  const [buildPlan, frontendBefore, backendBefore, reviewBefore] = await Promise.all([
+    readFile(path.join(dir, 'plan.json'), 'utf8').then(JSON.parse).catch(() => {
+      throw new Error(`generated/${id} has no plan.json, so it predates refinement support. Generate a fresh app to refine it.`);
+    }),
+    readFile(path.join(dir, 'public', 'index.html'), 'utf8'),
+    readFile(path.join(dir, 'server.js'), 'utf8'),
+    readFile(path.join(dir, 'review.json'), 'utf8').then(JSON.parse).catch(() => ({}))
+  ]);
+
+  return swarm.task('refinement', {
+    'devswarm.generation.id': id,
+    'devswarm.refinement.instruction': instruction.slice(0, 500)
+  }, async (root) => {
+    notify({ stage: 'scoping' });
+    const scope = await swarm.agent('planner', async (s) => {
+      const r = await planRefinement(buildPlan, instruction);
+      s.setAttributes({
+        'devswarm.refinement.targets': r.targets.join(','),
+        'devswarm.refinement.contract_changed': r.contract_changed
+      });
+      return r;
+    });
+    notify({ stage: 'scoped', targets: scope.targets, change: scope.change_summary, contract_changed: scope.contract_changed });
+
+    const runAgent = (name, fn, code) =>
+      swarm.agent(name, async (s) => {
+        s.setAttribute('devswarm.refinement', true);
+        const out = await fn(scope.plan, instruction, code);
+        s.setAttribute('devswarm.code_bytes', out.length);
+        return out;
+      });
+
+    notify({ stage: 'refining', targets: scope.targets });
+    let [frontendCode, backendCode] = await Promise.all([
+      scope.targets.includes('frontend') ? runAgent('frontend', refineFrontend, frontendBefore) : frontendBefore,
+      scope.targets.includes('backend') ? runAgent('backend', refineBackend, backendBefore) : backendBefore
+    ]);
+
+    notify({ stage: 'review', attempt: 1 });
+    const verdict = await swarm.agent('critic', async (s) => {
+      const v = await review(scope.plan, frontendCode, backendCode);
+      s.setAttributes({
+        'devswarm.review.verdict': v.verdict,
+        'devswarm.review.issue_count': v.issues?.length ?? 0
+      });
+      swarm.reviewEvents(s, v.issues);
+      return v;
+    });
+
+    const VIEWPORT = '<meta name="viewport" content="width=device-width, initial-scale=1">';
+    frontendCode = frontendCode.replace(/<meta[^>]*viewport[^>]*>/i, VIEWPORT);
+    if (!frontendCode.includes(VIEWPORT)) frontendCode = frontendCode.replace(/<head>/i, `<head>\n${VIEWPORT}`);
+
+    await Promise.all([
+      writeFile(path.join(dir, 'public', 'index.html'), frontendCode),
+      writeFile(path.join(dir, 'server.js'), backendCode),
+      writeFile(path.join(dir, 'plan.json'), JSON.stringify(scope.plan, null, 2)),
+      writeFile(path.join(dir, 'README.md'), appReadme(id, scope.plan))
+    ]);
+    const history = [...(reviewBefore.refinements || []), {
+      instruction,
+      change_summary: scope.change_summary,
+      targets: scope.targets,
+      contract_changed: scope.contract_changed,
+      verdict: verdict.verdict,
+      catches: verdict.issues || []
+    }];
+    await writeFile(path.join(dir, 'review.json'), JSON.stringify({ ...reviewBefore, refinements: history }, null, 2));
+
+    // The running preview holds the old code and old in-memory data.
+    stopApp(id);
+
+    root.setAttributes({
+      'devswarm.refinement.verdict': verdict.verdict,
+      'devswarm.refinement.critic_catches': verdict.issues?.length ?? 0,
+      'devswarm.refinement.count': history.length
+    });
+    m.refinements.add(1, { verdict: verdict.verdict, targets: scope.targets.join(',') });
+    slog('info', `refinement ${history.length} on ${id}: ${scope.change_summary} (${scope.targets.join(', ')}), ${verdict.verdict}`, {
+      'devswarm.generation.id': id, verdict: verdict.verdict, targets: scope.targets.join(',')
+    });
+    const result = {
+      id, targets: scope.targets, change: scope.change_summary, contract_changed: scope.contract_changed,
+      verdict: verdict.verdict, catches: verdict.issues || [], refinement: history.length,
+      preview: `/preview/${id}/`, name: scope.plan.name
+    };
+    emit('refined', result);
+    return result;
   });
 }

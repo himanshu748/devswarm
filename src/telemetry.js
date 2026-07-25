@@ -37,7 +37,8 @@ export const m = {
   llmDuration: meter.createHistogram('devswarm.llm.duration', { description: 'LLM call duration in seconds', unit: 's' }),
   fallbacks: meter.createCounter('devswarm.fallback.promotions', { description: 'Primary-to-fallback model promotions, by role' }),
   catches: meter.createCounter('devswarm.critic.catches', { description: 'Critic catches, by target and severity' }),
-  generations: meter.createCounter('devswarm.generations', { description: 'Completed generations, by verdict' })
+  generations: meter.createCounter('devswarm.generations', { description: 'Completed generations, by verdict' }),
+  refinements: meter.createCounter('devswarm.refinements', { description: 'Applied refinements, by verdict and targets' })
 };
 
 // Logs: structured swarm events as a third signal alongside traces and metrics.

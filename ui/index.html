@@ -7,7 +7,7 @@
 <meta name="description" content="DevSwarm turns a prompt into a full-stack app using a swarm of specialized open models, review-gated and fully traced into SigNoz.">
 <link rel="icon" type="image/png" href="/favicon.png">
 <meta property="og:title" content="DevSwarm, the swarm that watches itself">
-<meta property="og:description" content="One prompt in, a reviewed full-stack app out. Four open models, a critic gate, and every step traced into SigNoz.">
+<meta property="og:description" content="One prompt in, a reviewed full-stack app out. Five open models, a critic gate, and every step traced into SigNoz.">
 <meta property="og:image" content="/og.png">
 <meta property="og:type" content="website">
 <meta name="twitter:card" content="summary_large_image">
@@ -172,7 +172,7 @@
     <div class="wrap">
       <p class="eyebrow">Live · built on open models</p>
       <h1>The swarm that watches itself, <em>and everything it builds.</em></h1>
-      <p class="sub">DevSwarm turns one prompt into a working full-stack app using four specialized open-weight models. A critic reviews every line before you see it, every step is traced into SigNoz, and when a model degrades, a SigNoz alert wakes the swarm's own doctor to fix the routing.</p>
+      <p class="sub">DevSwarm turns one prompt into a working full-stack app using five specialist open-weight models. A critic reviews every line before you see it, every step is traced into SigNoz, and when a model degrades, a SigNoz alert wakes the swarm's own doctor to fix the routing.</p>
       <div class="ctas">
         <a class="btn btn-primary" href="/app">Open Mission Control</a>
         <a class="btn btn-ghost" href="https://github.com/himanshu748/devswarm">View source on GitHub</a>
@@ -196,11 +196,11 @@
   <div class="strip" aria-label="Models in the swarm">
     <div class="wrap">
       <span class="lbl">The swarm</span>
-      <span class="chip" style="--c:var(--planner)">GLM-5.2</span>
-      <span class="chip" style="--c:var(--frontend)">Kimi K2.6</span>
-      <span class="chip" style="--c:var(--backend)">Qwen3-Coder-480B</span>
-      <span class="chip" style="--c:var(--critic)">DeepSeek-V4</span>
-      <span class="chip" style="--c:var(--doctor)">Qwen3.6-35B</span>
+      <span class="chip" style="--c:var(--planner)">GLM-5.2 · plan, build, diagnose</span>
+      <span class="chip" style="--c:var(--backend)">Qwen3-Coder-480B · backend</span>
+      <span class="chip" style="--c:var(--critic)">Kimi-K2.7-Code · review</span>
+      <span class="chip" style="--c:var(--frontend)">Kimi-K2.6 · standby</span>
+      <span class="chip" style="--c:var(--doctor)">DeepSeek-V4-Flash · standby</span>
       <span class="lbl" style="margin-left:auto">served via Hugging Face</span>
     </div>
   </div>
@@ -279,7 +279,7 @@
         <blockquote style="font:15px/1.7 'Geist Mono'; color:var(--dim); border-left:2.5px solid var(--doctor); padding-left:18px; margin:4px 0 14px">
           "The critic role is the clear problem area: its primary triggered 6 fallback promotions out of 9 calls (67%) with a 22% error rate and p95 latency of 242s. Backend, planner and doctor are healthy."
         </blockquote>
-        <figcaption class="catch" style="border-color:color-mix(in srgb, var(--doctor) 40%, transparent); color:var(--doctor); animation-delay:0.4s">action taken: critic pinned to DeepSeek-V4-Flash. No human involved.</figcaption>
+        <figcaption class="catch" style="border-color:color-mix(in srgb, var(--doctor) 40%, transparent); color:var(--doctor); animation-delay:0.4s">action taken: critic pinned to its fallback, no human involved. That diagnosis is why the critic now runs Kimi-K2.7-Code.</figcaption>
       </figure>
     </div>
   </section>

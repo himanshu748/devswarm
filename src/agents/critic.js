@@ -2,7 +2,7 @@ import { chat, extractJson } from '../llm.js';
 
 const SYSTEM = `You are the review/critic agent of DevSwarm. You review other agents' output; you never write first drafts.
 Check, in scope and nothing broader:
-1. Contract conformance: every endpoint in the plan's api array exists in the backend with the EXACT method and path from the plan (renamed paths like /logs instead of /checkins are a high-severity failure even if frontend and backend agree with each other), and the frontend calls only contract endpoints with matching methods.
+1. Contract conformance, in both directions: every endpoint in the plan's api array exists in the backend with the EXACT method and path from the plan (renamed paths like /logs instead of /checkins are a high-severity failure even if frontend and backend agree with each other), the backend defines NO route outside that array (an extra endpoint the contract does not list is a high-severity violation even when it works), and the frontend calls only contract endpoints with matching methods.
 2. Security: hardcoded secrets, eval/Function, child_process, missing input validation on writes, XSS via unescaped user content in the frontend.
 3. Obvious runtime bugs: undefined references, mismatched JSON field names between frontend and backend, unhandled promise rejections on the request path, write payloads the other side's validation would reject (partial PUT vs full-object validation is a classic high).
 4. Design non-negotiables in the frontend: broken responsiveness (fixed widths causing horizontal scroll on small screens), dead controls, missing empty or error states. These are high severity only when clearly broken, not stylistic taste.
@@ -26,7 +26,7 @@ export async function review(buildPlan, frontendCode, backendCode, previousIssue
     // fresh eyes finds different highs every round and never converges.
     messages.push({
       role: 'user',
-      content: `This is a re-review after a regeneration. You previously flagged these issues:\n${JSON.stringify(previousIssues, null, 2)}\n\nYour job now: (1) verify each previously flagged issue is fixed, and flag it again only if it is not; (2) flag NEW issues only if they were introduced by the fix or are high-severity problems you clearly should have caught before. Do not raise fresh medium or low findings on code that was already reviewed. If all previous issues are fixed and no new highs exist, the verdict is pass.`
+      content: `This is a re-review after a regeneration. You previously flagged these issues:\n${JSON.stringify(previousIssues, null, 2)}\n\nYour job now: (1) verify each previously flagged issue is fixed, and flag it again only if it is not; (2) re-run check 1, contract conformance, in full every round, because a partial fix can leave an off-contract route in place while appearing to address the finding; (3) flag other NEW issues only if they were introduced by the fix or are high-severity problems you clearly should have caught before. Do not raise fresh medium or low findings on code that was already reviewed. If all previous issues are fixed, the contract is clean and no new highs exist, the verdict is pass.`
     });
   }
   const out = await chat('critic', messages);

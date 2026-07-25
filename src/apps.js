@@ -88,6 +88,16 @@ process.on('exit', () => {
   for (const [, e] of running) e.proc?.kill();
 });
 
+// After a refinement the child holds stale code and stale in-memory data, so
+// the preview must be restarted rather than reused.
+export function stopApp(id) {
+  const e = running.get(id);
+  if (!e) return false;
+  e.proc?.kill();
+  running.delete(id);
+  return true;
+}
+
 export function runningApps() {
   return [...running.values()].map((e) => ({ id: e.id, port: e.port, idle_s: Math.round((Date.now() - e.lastHit) / 1000) }));
 }

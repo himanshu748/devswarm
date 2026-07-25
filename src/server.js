@@ -4,7 +4,7 @@ import express from 'express';
 import path from 'node:path';
 import http from 'node:http';
 import { readdir, readFile, stat } from 'node:fs/promises';
-import { generate } from './orchestrator.js';
+import { generate, refine } from './orchestrator.js';
 import { ROLES, promoted } from './models.js';
 import { ensureRunning, runningApps, stopAll } from './apps.js';
 import { bus, emit } from './bus.js';
@@ -42,6 +42,20 @@ app.post('/api/generate', async (req, res) => {
   }
 });
 
+app.post('/api/refine', async (req, res) => {
+  const { id, instruction } = req.body || {};
+  if (!id || typeof id !== 'string') return res.status(400).json({ error: 'id (string) is required' });
+  if (!instruction || typeof instruction !== 'string') return res.status(400).json({ error: 'instruction (string) is required' });
+  try {
+    const result = await refine(id, instruction, (e) => console.log('[refine]', JSON.stringify(e).slice(0, 200)));
+    res.json(result);
+  } catch (err) {
+    console.error(err);
+    emit('generation_error', { reason: String(err.message || err) });
+    res.status(500).json({ error: String(err.message || err) });
+  }
+});
+
 app.get('/api/models', (_req, res) => res.json({ roles: ROLES, promoted }));
 
 app.get('/api/config', (_req, res) => res.json({ signozUrl: process.env.SIGNOZ_URL || 'http://localhost:8080' }));
@@ -58,12 +72,19 @@ app.get('/api/generations', async (_req, res) => {
       const info = await stat(dir);
       let review = null;
       try { review = JSON.parse(await readFile(path.join(dir, 'review.json'), 'utf8')); } catch { /* older scaffold */ }
+      const refinements = review?.refinements ?? [];
+      const last = refinements.length ? refinements[refinements.length - 1] : null;
+      // Refinement needs the persisted contract; apps built before plan.json cannot.
+      const refinable = await stat(path.join(dir, 'plan.json')).then(() => true).catch(() => false);
       return {
         id: d.name,
         at: Math.round(info.mtimeMs),
-        verdict: review?.verdict ?? null,
+        verdict: last?.verdict ?? review?.verdict ?? null,
         catches: review?.catches?.length ?? null,
-        regenerations: review?.regenerations ?? null
+        regenerations: review?.regenerations ?? null,
+        refinements: refinements.length,
+        refinable,
+        last_change: last?.change_summary ?? null
       };
     }));
     apps.sort((a, b) => b.at - a.at);
@@ -131,6 +152,14 @@ app.post('/api/doctor/run', async (_req, res) => {
   }
 });
 
+// Injected into previewed HTML only; the artifact on disk is never modified.
+const previewShim = (id) => `<script>(function(){var P='/preview/${id}',f=window.fetch;
+window.fetch=function(input,init){try{
+if(typeof input==='string'&&input.charAt(0)==='/'&&input.indexOf('/api/')===0)input=P+input;
+else if(input&&input.url){var u=new URL(input.url,location.origin);
+if(u.pathname.indexOf('/api/')===0)input=new Request(P+u.pathname+u.search,input);}
+}catch(e){}return f.call(window,input,init);};})();</script>`;
+
 // Previews are live: the generated backend runs as a child process and every
 // request is piped to it raw, so any body type and streaming responses work
 // and its API (and its OTel traces) are real. If the app cannot boot, fall
@@ -146,6 +175,23 @@ app.use('/preview/:id', async (req, res) => {
       (ur) => {
         const headers = { ...ur.headers };
         if (headers.location?.startsWith('/')) headers.location = `/preview/${id}${headers.location}`;
+        // Generated apps call their API at an absolute /api/... path, which is
+        // correct when they are deployed at a domain root but resolves to
+        // DevSwarm itself under /preview/:id. Left alone the app 404s and
+        // silently drops into its localStorage fallback, so the preview looks
+        // fine while the real backend is never touched. Rewriting fetch here
+        // keeps the shipped artifact correct and makes the preview honest.
+        if ((headers['content-type'] || '').includes('text/html')) {
+          delete headers['content-length'];
+          const chunks = [];
+          ur.on('data', (c) => chunks.push(c));
+          ur.on('end', () => {
+            const html = Buffer.concat(chunks).toString('utf8').replace(/<head([^>]*)>/i, `<head$1>${previewShim(id)}`);
+            res.writeHead(ur.statusCode, headers);
+            res.end(html);
+          });
+          return;
+        }
         res.writeHead(ur.statusCode, headers);
         ur.pipe(res);
       }

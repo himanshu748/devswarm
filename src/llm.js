@@ -12,7 +12,7 @@ function token() {
 
 // Streaming keeps bytes flowing on multi-minute codegen calls; buffered
 // responses sat idle past the router's gateway timeout and 504ed.
-async function callModel(model, messages, temperature) {
+async function callModel(model, messages, temperature, params) {
   const res = await fetch(HF_URL, {
     method: 'POST',
     // Streaming defeats gateway timeouts, but a stalled stream would hang a
@@ -23,7 +23,8 @@ async function callModel(model, messages, temperature) {
       model, messages, temperature,
       max_tokens: MODEL_MAX_TOKENS[model] ?? DEFAULT_MAX_TOKENS,
       stream: true,
-      stream_options: { include_usage: true }
+      stream_options: { include_usage: true },
+      ...(params || {})
     })
   });
   if (!res.ok) throw new Error(`HF router ${res.status} for ${model}: ${(await res.text()).slice(0, 300)}`);
@@ -50,7 +51,9 @@ async function callModel(model, messages, temperature) {
       const delta = choice.delta || {};
       if (typeof delta.content === 'string') content += delta.content;
       else if (Array.isArray(delta.content)) content += delta.content.map((p) => p.text ?? '').join('');
+      // Providers disagree on the key: most use reasoning_content, together uses reasoning.
       if (typeof delta.reasoning_content === 'string') reasoning += delta.reasoning_content;
+      else if (typeof delta.reasoning === 'string') reasoning += delta.reasoning;
     }
   }
 
@@ -83,7 +86,7 @@ export async function chat(role, messages) {
   const call = async (model) => {
     lastTried = model;
     const t0 = Date.now();
-    const { content, usage } = await callModel(model, messages, cfg.temperature);
+    const { content, usage } = await callModel(model, messages, cfg.temperature, cfg.params);
     const inTok = usage.prompt_tokens ?? 0;
     const outTok = usage.completion_tokens ?? 0;
     m.tokens.add(inTok + outTok, { role, model });
