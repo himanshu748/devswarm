@@ -176,6 +176,7 @@
     background:var(--panel); border:1px solid var(--border); border-radius:8px; font-size:11px;
   }
   .role-chip .swatch { width:8px; height:8px; border-radius:2px; background:var(--c); flex:none; }
+  .role-chip .rtime { margin-left:auto; color:var(--dim); font-size:10.5px; flex:none; }
   .role-chip .rname { color:var(--dim); width:62px; flex:none; text-transform:capitalize; }
   .role-chip .model { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:10.5px; }
   .badge {
@@ -312,7 +313,10 @@ const POS = { planner:[50,16], frontend:[24,54], backend:[76,54], critic:[50,86]
 const EDGES = [['planner','frontend'],['planner','backend'],['frontend','critic'],['backend','critic']];
 const graph = document.getElementById('graph');
 const svg = document.getElementById('edges');
-const nodes = {}, edgeEls = {}, roleTokens = {}, roleModels = {};
+const nodes = {}, edgeEls = {}, roleTokens = {}, roleModels = {}, roleMs = {};
+// Tokens already accumulate across a role's calls; time now does too, so a role
+// that ran twice reads as its total rather than as its last call.
+const dur = (ms) => (ms < 60000 ? `${Math.round(ms / 1000)}s` : `${Math.floor(ms / 60000)}m ${String(Math.round(ms % 60000 / 1000)).padStart(2, '0')}s`);
 let totalTokens = 0, genStart = 0, timers = {}, elapsedTimer = null, generationLive = false;
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
@@ -351,6 +355,7 @@ function chip(role, model, fb) {
     return `<div class="role-chip mono" style="--c:var(--${r})">
       <span class="swatch"></span><span class="rname">${r}</span>
       <span class="model">${m ? short(m.model) : 'standby'}</span>
+      ${roleMs[r] ? `<span class="rtime mono" title="total time this role's model ran this generation">${dur(roleMs[r])}</span>` : ''}
       ${m && m.fb ? '<span class="badge">FALLBACK</span>' : ''}</div>`;
   }).join('');
 }
@@ -384,7 +389,7 @@ function activate(role, model) {
   const started = Date.now();
   timers[role] = setInterval(() => {
     document.getElementById('sub-'+role).innerHTML =
-      `<b>${short(model)}</b>${((Date.now()-started)/1000).toFixed(0)}s · ${(roleTokens[role]||0).toLocaleString()} tok`;
+      `<b>${short(model)}</b>${dur((roleMs[role] || 0) + (Date.now() - started))} · ${(roleTokens[role]||0).toLocaleString()} tok`;
   }, 250);
 }
 function deactivate(role) {
@@ -585,6 +590,7 @@ es.onmessage = (msg) => {
   if (e.type === 'llm_start') { activate(e.role, e.model); chip(e.role, e.model, roleModels[e.role]?.fb); spanStart(e.role, e.model, e.traceId); }
   if (e.type === 'llm_end') {
     roleTokens[e.role] = (roleTokens[e.role]||0) + e.in + e.out;
+    roleMs[e.role] = (roleMs[e.role] || 0) + e.ms;
     if (nodes[e.role] && generationLive) {
       totalTokens += e.in + e.out;
       document.getElementById('tokens').textContent = totalTokens.toLocaleString();
@@ -592,7 +598,8 @@ es.onmessage = (msg) => {
     }
     deactivate(e.role); spanEnd(e.role, e.ms, e.in + e.out);
     const sub = document.getElementById('sub-'+e.role);
-    if (sub) sub.innerHTML = `<b>${short(e.model)}</b>${(e.ms/1000).toFixed(0)}s · ${(roleTokens[e.role]||0).toLocaleString()} tok`;
+    if (sub) sub.innerHTML = `<b>${short(e.model)}</b>${dur(roleMs[e.role] || 0)} · ${(roleTokens[e.role]||0).toLocaleString()} tok`;
+    chip();
   }
   if (e.type === 'fallback') { chip(e.role, e.to, true); relabelSpan(e.role, e.to); feed(e.role, `<b>fallback promoted</b> ${esc(e.role)}: ${short(e.to)}`); }
   if (e.type === 'fallback_reset') { chip(e.role, e.to, false); feed(e.role, `<b>fallback expired</b> ${esc(e.role)} back on ${short(e.to)}`); }
@@ -664,7 +671,7 @@ document.getElementById('f').addEventListener('submit', (ev) => {
   if (!prompt) return;
   genStart = Date.now(); totalTokens = 0; generationLive = true;
   clearInterval(elapsedTimer); elapsedTimer = setInterval(tickElapsed, 1000); tickElapsed();
-  for (const r of ROLES) { roleTokens[r] = 0; document.getElementById('sub-'+r).innerHTML=''; }
+  for (const r of ROLES) { roleTokens[r] = 0; roleMs[r] = 0; document.getElementById('sub-'+r).innerHTML=''; }
   document.getElementById('tokens').textContent = '0';
   document.getElementById('catches').textContent = '0';
   document.getElementById('river').innerHTML = '<div class="zone-title">Trace river</div>';
