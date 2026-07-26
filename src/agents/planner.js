@@ -21,7 +21,7 @@ export async function plan(prompt) {
   const out = await chat('planner', [
     { role: 'system', content: SYSTEM },
     { role: 'user', content: prompt }
-  ]);
+  ], { validate: extractJson });
   return extractJson(out);
 }
 
@@ -45,7 +45,7 @@ export async function planRefinement(buildPlan, instruction) {
   const out = await chat('planner', [
     { role: 'system', content: REFINE_SYSTEM },
     { role: 'user', content: `Existing build plan:\n${JSON.stringify(buildPlan, null, 2)}\n\nUser's refinement request:\n${instruction}` }
-  ]);
+  ], { validate: extractJson });
   const parsed = extractJson(out);
   const targets = (parsed.targets || []).filter((t) => t === 'frontend' || t === 'backend');
   return {

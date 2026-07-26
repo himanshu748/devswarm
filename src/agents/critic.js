@@ -29,6 +29,6 @@ export async function review(buildPlan, frontendCode, backendCode, previousIssue
       content: `This is a re-review after a regeneration. You previously flagged these issues:\n${JSON.stringify(previousIssues, null, 2)}\n\nYour job now: (1) verify each previously flagged issue is fixed, and flag it again only if it is not; (2) re-run check 1, contract conformance, in full every round, because a partial fix can leave an off-contract route in place while appearing to address the finding; (3) flag other NEW issues only if they were introduced by the fix or are high-severity problems you clearly should have caught before. Do not raise fresh medium or low findings on code that was already reviewed. If all previous issues are fixed, the contract is clean and no new highs exist, the verdict is pass.`
     });
   }
-  const out = await chat('critic', messages);
+  const out = await chat('critic', messages, { validate: extractJson });
   return extractJson(out);
 }

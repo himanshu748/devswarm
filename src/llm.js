@@ -67,7 +67,7 @@ async function callModel(model, messages, temperature, params) {
 // One chat completion for a role. The span, GenAI attributes, fallback-promotion
 // event and the mirrored bus events all come from otel-swarm's llm(); DevSwarm
 // layers its routing pins (TTL-bound) and per-call metrics on top.
-export async function chat(role, messages) {
+export async function chat(role, messages, opts = {}) {
   const cfg = ROLES[role];
   let first = cfg.primary;
   const pin = promoted[role];
@@ -87,6 +87,11 @@ export async function chat(role, messages) {
     lastTried = model;
     const t0 = Date.now();
     const { content, usage } = await callModel(model, messages, cfg.temperature, cfg.params);
+    // A response that parses to nothing usable is a failed call, not a
+    // successful one. Validating inside call() means unusable output takes the
+    // same fallback path as an HTTP error, instead of throwing downstream and
+    // killing a generation that is minutes deep.
+    if (opts.validate) opts.validate(content);
     const inTok = usage.prompt_tokens ?? 0;
     const outTok = usage.completion_tokens ?? 0;
     m.tokens.add(inTok + outTok, { role, model });

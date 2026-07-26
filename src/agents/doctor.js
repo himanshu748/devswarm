@@ -77,7 +77,7 @@ export async function diagnose(minutes = 180) {
   const out = await chat('doctor', [
     { role: 'system', content: SYSTEM },
     { role: 'user', content: JSON.stringify(stats, null, 2) }
-  ]);
+  ], { validate: extractJson });
   const verdict = extractJson(out);
   const applied = [];
   for (const a of verdict.actions || []) {
