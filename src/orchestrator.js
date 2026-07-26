@@ -28,6 +28,24 @@ const appDashboard = (id, plan) => ({
   ]
 });
 
+// Invariants the critic reads straight past, because they are build
+// requirements rather than contract entries: nothing in the plan's api array
+// says the backend has to serve the page the frontend agent just wrote. One
+// app in thirty shipped a working API on a 404 because of exactly this. A model
+// instruction can be missed; a check cannot, so these join the critic's issues
+// and go round the same regeneration loop.
+export function structuralIssues(backendCode) {
+  const issues = [];
+  if (!/express\.static|sendFile/.test(backendCode)) {
+    issues.push({
+      target: 'backend',
+      severity: 'high',
+      description: 'The backend never serves ./public, so opening the app returns 404 even though its API works. Serve the public directory with express.static (and keep the API routes above it).'
+    });
+  }
+  return issues;
+}
+
 // Best effort: if a SigNoz API token is configured, the app's dashboard exists
 // in SigNoz before the user has even opened the preview.
 async function provisionDashboard(id, plan) {
@@ -133,6 +151,11 @@ export async function generate(prompt, onEvent = () => {}) {
         notify({ stage: 'review', attempt: attempts + 1 });
         verdict = await swarm.agent('critic', async (s) => {
           const v = await review(buildPlan, frontendCode, backendCode, verdict?.issues);
+          const structural = structuralIssues(backendCode);
+          if (structural.length) {
+            v.issues = [...(v.issues || []), ...structural];
+            v.verdict = 'fail';
+          }
           s.setAttributes({
             'devswarm.review.verdict': v.verdict,
             'devswarm.review.issue_count': v.issues?.length ?? 0

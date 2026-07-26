@@ -6,6 +6,7 @@ Check, in scope and nothing broader:
 2. Security: hardcoded secrets, eval/Function, child_process, missing input validation on writes, XSS via unescaped user content in the frontend.
 3. Obvious runtime bugs: undefined references, mismatched JSON field names between frontend and backend, unhandled promise rejections on the request path, write payloads the other side's validation would reject (partial PUT vs full-object validation is a classic high).
 4. Design non-negotiables in the frontend: broken responsiveness (fixed widths causing horizontal scroll on small screens), dead controls, missing empty or error states. These are high severity only when clearly broken, not stylistic taste.
+5. The app boots into something: the backend MUST serve ./public statically (express.static or an explicit sendFile route for /), or the user opens the app and gets a 404 with a working API behind it. Missing static serving is always high severity, and it is not in the plan's api array because it is not an API route.
 Respond with ONLY JSON:
 {
   "verdict": "pass" | "fail",
