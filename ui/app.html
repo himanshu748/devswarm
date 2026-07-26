@@ -64,6 +64,33 @@
     border:1px solid color-mix(in srgb, var(--critic) 34%, transparent);
   }
   #otlp-warn.on { display:flex; }
+
+  /* plan viewer */
+  #plan-panel { display:none; position:fixed; inset:0; z-index:20; background:rgba(0,0,0,.62); backdrop-filter:blur(3px); }
+  #plan-panel.on { display:block; }
+  .plan-sheet {
+    position:absolute; top:0; right:0; bottom:0; width:min(640px, 94vw); overflow-y:auto;
+    background:var(--panel); border-left:1px solid var(--border); padding:0 26px 40px;
+  }
+  .plan-head {
+    position:sticky; top:0; display:flex; align-items:center; justify-content:space-between; gap:16px;
+    padding:18px 0 14px; background:var(--panel); border-bottom:1px solid var(--border); margin-bottom:20px;
+  }
+  #plan-title { font-size:13px; color:var(--text); }
+  #plan-close { background:none; border:1px solid var(--border); color:var(--dim); border-radius:8px; padding:4px 12px; font:500 11px 'Inter'; cursor:pointer; }
+  #plan-close:hover { color:var(--text); border-color:var(--dim); }
+  #plan-body h4 { margin:26px 0 10px; font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--dim); font-weight:600; }
+  .plan-summary { font-size:14px; line-height:1.55; color:var(--text); margin:0; }
+  .plan-design { font-size:12.5px; line-height:1.6; color:var(--dim); margin:0; }
+  .plan-meta { display:flex; flex-wrap:wrap; gap:6px; margin-top:14px; }
+  .plan-chip { font:500 10.5px 'JetBrains Mono', monospace; color:var(--dim); border:1px solid var(--border); border-radius:999px; padding:3px 9px; }
+  .plan-chip.strong { color:var(--planner); border-color:color-mix(in srgb, var(--planner) 40%, transparent); }
+  .plan-api { list-style:none; padding:0; margin:0; display:flex; flex-direction:column; gap:6px; font-size:11.5px; }
+  .plan-api b { color:var(--backend); font-weight:600; }
+  .plan-table { width:100%; border-collapse:collapse; font-size:11.5px; }
+  .plan-table th { text-align:left; font-weight:500; color:var(--dim); padding:4px 10px 6px 0; border-bottom:1px solid var(--border); font-size:10.5px; }
+  .plan-table td { padding:7px 10px 7px 0; border-bottom:1px solid color-mix(in srgb, var(--border) 55%, transparent); vertical-align:top; line-height:1.45; }
+  .plan-table td.dim { color:var(--dim); }
   #otlp-warn::before { content:''; width:6px; height:6px; border-radius:50%; background:var(--critic); flex:none; }
 
   /* layout */
@@ -212,6 +239,15 @@
     <button id="dispatch">Dispatch</button>
     <button id="cancel-refine" type="button" hidden>Cancel</button>
   </form>
+  <div id="plan-panel">
+    <div class="plan-sheet">
+      <div class="plan-head">
+        <span id="plan-title" class="mono"></span>
+        <button id="plan-close" type="button">close</button>
+      </div>
+      <div id="plan-body"></div>
+    </div>
+  </div>
   <div class="header-links">
     <span id="otlp-warn" class="mono" title="SIGNOZ_OTLP_ENDPOINT is not set, so the swarm's own spans are printing to the server console instead of reaching SigNoz. Set it in .env (e.g. http://localhost:4318) and restart.">not exporting to SigNoz</span>
     <a id="signoz-link" href="http://localhost:8080" target="_blank">SigNoz &#8599;</a>
@@ -440,12 +476,17 @@ async function loadHangar() {
         </div>
         <div class="links">
           <a href="/preview/${esc(a.id)}/" target="_blank">Preview &#8599;</a>
+          ${a.refinable ? `<a class="dim-link plan-link" href="#" data-id="${esc(a.id)}">Plan</a>` : ''}
           ${a.refinable ? `<a class="dim-link refine-link" href="#" data-id="${esc(a.id)}">Refine</a>` : ''}
           <a class="dim-link" href="${SIGNOZ_URL}/services/${esc(a.id)}" target="_blank" title="This app's own traces in SigNoz">SigNoz &#8599;</a>
         </div>`;
       card.querySelector('.refine-link')?.addEventListener('click', (ev) => {
         ev.preventDefault();
         enterRefineMode(a.id);
+      });
+      card.querySelector('.plan-link')?.addEventListener('click', (ev) => {
+        ev.preventDefault();
+        showPlan(a.id);
       });
       hangar.appendChild(card);
     }
@@ -455,6 +496,45 @@ async function loadHangar() {
   } catch { /* hangar is decorative when the API is down */ }
 }
 loadHangar();
+
+// The locked contract, rendered. The per-field rules strings are the reason two
+// models agree, so they are the part worth reading, not the JSON around them.
+async function showPlan(id) {
+  const panel = document.getElementById('plan-panel');
+  const body = document.getElementById('plan-body');
+  document.getElementById('plan-title').textContent = id;
+  body.innerHTML = '<div class="empty">loading the contract...</div>';
+  panel.classList.add('on');
+  try {
+    const p = await (await fetch(`/api/generations/${encodeURIComponent(id)}/plan`)).json();
+    if (p.error) throw new Error(p.error);
+    const entities = (p.entities || []).map((e) => `
+      <h4>${esc(e.name)}</h4>
+      <table class="plan-table">
+        <tr><th>field</th><th>type</th><th>rules the builders were held to</th></tr>
+        ${(e.fields || []).map((f) => `<tr>
+          <td class="mono">${esc(f.name)}</td><td class="mono dim">${esc(f.type)}</td><td>${esc(f.rules || '')}</td>
+        </tr>`).join('')}
+      </table>`).join('');
+    const api = (p.api || []).map((r) => `<li class="mono">
+      <b>${esc(r.method || '')}</b> ${esc(r.path || '')}${r.purpose ? ` <span class="dim">${esc(r.purpose)}</span>` : ''}</li>`).join('');
+    const chips = (list) => (list || []).map((x) => `<span class="plan-chip">${esc(typeof x === 'string' ? x : x.name || '')}</span>`).join('');
+    body.innerHTML = `
+      <p class="plan-summary">${esc(p.summary || '')}</p>
+      <div class="plan-meta">${p.archetype ? `<span class="plan-chip strong">${esc(p.archetype)}</span>` : ''}${chips(p.pages)}${chips(p.sections)}</div>
+      ${p.design_direction ? `<h4>Design direction</h4><p class="plan-design">${esc(p.design_direction)}</p>` : ''}
+      ${api ? `<h4>API contract</h4><ul class="plan-api">${api}</ul>` : ''}
+      ${entities}`;
+  } catch (err) {
+    body.innerHTML = `<div class="empty">${esc(String(err.message || err))}</div>`;
+  }
+}
+document.addEventListener('click', (ev) => {
+  if (ev.target.id === 'plan-panel' || ev.target.id === 'plan-close') document.getElementById('plan-panel').classList.remove('on');
+});
+document.addEventListener('keydown', (ev) => {
+  if (ev.key === 'Escape') document.getElementById('plan-panel').classList.remove('on');
+});
 
 // The one input serves both modes: a new build, or a scoped edit to an app the
 // swarm already shipped.

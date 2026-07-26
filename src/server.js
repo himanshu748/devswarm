@@ -76,7 +76,12 @@ app.get('/api/generations', async (_req, res) => {
       .catch((err) => { if (err.code === 'ENOENT') return []; throw err; });
     const apps = await Promise.all(entries.filter((d) => d.isDirectory()).map(async (d) => {
       const dir = path.resolve('generated', d.name);
-      const info = await stat(dir);
+      // Ordered by when the swarm last wrote to the app, not by the directory
+      // mtime: opening a folder in Finder drops a .DS_Store in it and would
+      // float a day-one failure to the top of the hangar.
+      const stamp = await stat(path.join(dir, 'review.json'))
+        .then((s) => s.mtimeMs)
+        .catch(() => stat(dir).then((s) => s.mtimeMs));
       let review = null;
       try { review = JSON.parse(await readFile(path.join(dir, 'review.json'), 'utf8')); } catch { /* older scaffold */ }
       const refinements = review?.refinements ?? [];
@@ -85,7 +90,7 @@ app.get('/api/generations', async (_req, res) => {
       const refinable = await stat(path.join(dir, 'plan.json')).then(() => true).catch(() => false);
       return {
         id: d.name,
-        at: Math.round(info.mtimeMs),
+        at: Math.round(stamp),
         verdict: last?.verdict ?? review?.verdict ?? null,
         catches: review?.catches?.length ?? null,
         regenerations: review?.regenerations ?? null,
@@ -99,6 +104,18 @@ app.get('/api/generations', async (_req, res) => {
     res.json({ apps: apps.map((a) => ({ ...a, running: live.has(a.id) })) });
   } catch (err) {
     res.status(500).json({ error: String(err.message || err) });
+  }
+});
+
+// The contract the planner locked for one app. Mission Control renders it, so
+// the artifact both builders were held to is readable without opening the repo.
+app.get('/api/generations/:id/plan', async (req, res) => {
+  const { id } = req.params;
+  if (!/^[a-z0-9-]{1,60}$/i.test(id)) return res.status(400).json({ error: 'invalid app id' });
+  try {
+    res.type('application/json').send(await readFile(path.resolve('generated', id, 'plan.json'), 'utf8'));
+  } catch {
+    res.status(404).json({ error: 'this app was built before plans were persisted' });
   }
 });
 
