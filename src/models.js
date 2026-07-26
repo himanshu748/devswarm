@@ -6,10 +6,12 @@ export const ROLES = {
     fallback: 'Qwen/Qwen3.6-35B-A3B',
     temperature: 0.2
   },
-  // GLM-5.2 leads frontend on craft: side by side against Kimi-K2.6 it derives a
+  // GLM-5.2 leads frontend on craft: side by side against Kimi it derives a
   // palette from the subject, builds a real hero and keeps a typographic
-  // hierarchy, where Kimi returns competent template layout. Kimi backs it up
-  // because it is roughly twice as fast per token when the primary is down.
+  // hierarchy, where Kimi returns competent template layout. The backup is
+  // K2.7-Code rather than the older K2.6: same family, newer weights, and it is
+  // the model that measured best on our critic benchmark, so a rescue build is
+  // more likely to survive review.
   //
   // Thinking is disabled for this role only. Measured on one bookshelf app:
   // with reasoning on, GLM spent two thirds of its budget thinking, hit 32768
@@ -18,7 +20,7 @@ export const ROLES = {
   // reasoning, since their outputs are small and the thinking helps them.
   frontend: {
     primary: 'zai-org/GLM-5.2:fireworks-ai',
-    fallback: 'moonshotai/Kimi-K2.6',
+    fallback: 'moonshotai/Kimi-K2.7-Code',
     temperature: 0.4,
     params: { thinking: { type: 'disabled' } }
   },
