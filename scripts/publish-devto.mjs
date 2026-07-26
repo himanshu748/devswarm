@@ -1,7 +1,12 @@
 // Publish BLOG.md to dev.to as a DRAFT via the Forem API.
 //
 //   DEVTO_API_KEY=... node scripts/publish-devto.mjs
-//   DEVTO_API_KEY=... node scripts/publish-devto.mjs --publish   (go live immediately)
+//   DEVTO_API_KEY=... node scripts/publish-devto.mjs --publish            (go live immediately)
+//   DEVTO_API_KEY=... node scripts/publish-devto.mjs --update 4231575     (overwrite an existing post)
+//
+// --update leaves the post's published state exactly as it is, so pushing an
+// edit to a draft cannot accidentally publish it and pushing to a live post
+// cannot accidentally unpublish it. Add --publish to an update to go live.
 //
 // Get the key from https://dev.to/settings/extensions under "DEV Community API Keys".
 // The API cannot upload images: every image URL in the markdown must already
@@ -28,6 +33,11 @@ for (const line of m[1].split('\n')) {
 }
 const body = m[2].trim();
 const publish = process.argv.includes('--publish');
+const updateId = process.argv[process.argv.indexOf('--update') + 1];
+if (process.argv.includes('--update') && !/^\d+$/.test(updateId || '')) {
+  console.error('--update needs the article id, for example: --update 4231575');
+  process.exit(1);
+}
 
 // Sanity check the image URLs before we ship a post full of broken images.
 const urls = [...body.matchAll(/!\[[^\]]*\]\((https?:\/\/[^)\s]+)\)/g)].map((x) => x[1]);
@@ -54,14 +64,15 @@ if (broken) {
 const article = {
   title: meta.title,
   body_markdown: body,
-  published: publish,
   tags: (meta.tags || '').split(',').map((t) => t.trim()).filter(Boolean).slice(0, 4),
   description: meta.description,
   main_image: meta.cover_image
 };
+// On update, omitting `published` preserves whatever the post already is.
+if (publish || !updateId) article.published = publish;
 
-const res = await fetch('https://dev.to/api/articles', {
-  method: 'POST',
+const res = await fetch(updateId ? `https://dev.to/api/articles/${updateId}` : 'https://dev.to/api/articles', {
+  method: updateId ? 'PUT' : 'POST',
   headers: {
     'api-key': KEY,
     'Content-Type': 'application/json',
@@ -76,7 +87,7 @@ if (!res.ok) {
   process.exit(1);
 }
 const out = JSON.parse(text);
-console.log(publish ? 'Published.' : 'Draft created (not public yet).');
+console.log(updateId ? `Updated article ${updateId} (published: ${out.published}).` : publish ? 'Published.' : 'Draft created (not public yet).');
 console.log('  url:  ', out.url);
 console.log('  edit: ', `https://dev.to/${out.username || ''}/${out.slug || ''}/edit`);
 console.log('  id:   ', out.id);
