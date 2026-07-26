@@ -55,6 +55,16 @@
   #status::before { content:''; width:7px; height:7px; border-radius:50%; background:var(--dim); }
   #status.live { color:var(--doctor); }
   #status.live::before { background:var(--doctor); }
+  /* Shown only when the swarm has nowhere to export to. Silent telemetry looks
+     exactly like a healthy swarm until you go looking for the traces. */
+  #otlp-warn {
+    display:none; align-items:center; gap:7px; padding:4px 10px; border-radius:999px;
+    font-size:11px; color:var(--critic); white-space:nowrap; cursor:help;
+    background:color-mix(in srgb, var(--critic) 12%, transparent);
+    border:1px solid color-mix(in srgb, var(--critic) 34%, transparent);
+  }
+  #otlp-warn.on { display:flex; }
+  #otlp-warn::before { content:''; width:6px; height:6px; border-radius:50%; background:var(--critic); flex:none; }
 
   /* layout */
   main { flex:1; display:grid; grid-template-columns:1fr 320px; grid-template-rows:minmax(0,1fr) 215px 148px; min-height:0; }
@@ -203,6 +213,7 @@
     <button id="cancel-refine" type="button" hidden>Cancel</button>
   </form>
   <div class="header-links">
+    <span id="otlp-warn" class="mono" title="SIGNOZ_OTLP_ENDPOINT is not set, so the swarm's own spans are printing to the server console instead of reaching SigNoz. Set it in .env (e.g. http://localhost:4318) and restart.">not exporting to SigNoz</span>
     <a id="signoz-link" href="http://localhost:8080" target="_blank">SigNoz &#8599;</a>
     <div id="status">swarm idle</div>
   </div>
@@ -353,6 +364,7 @@ let riverRaf = 0;
 let SIGNOZ_URL = 'http://localhost:8080';
 fetch('/api/config').then((r) => r.json()).then((c) => {
   if (c.signozUrl) { SIGNOZ_URL = c.signozUrl; document.getElementById('signoz-link').href = SIGNOZ_URL; }
+  document.getElementById('otlp-warn').classList.toggle('on', c.exporting === false);
 }).catch(() => {});
 
 function spanStart(role, model, traceId) {

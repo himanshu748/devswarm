@@ -58,7 +58,12 @@ app.post('/api/refine', async (req, res) => {
 
 app.get('/api/models', (_req, res) => res.json({ roles: ROLES, promoted }));
 
-app.get('/api/config', (_req, res) => res.json({ signozUrl: process.env.SIGNOZ_URL || 'http://localhost:8080' }));
+app.get('/api/config', (_req, res) => res.json({
+  signozUrl: process.env.SIGNOZ_URL || 'http://localhost:8080',
+  // Mission Control warns on false: a swarm exporting to nothing looks healthy
+  // from the UI, and you only notice when the dashboards stay empty.
+  exporting: Boolean(process.env.SIGNOZ_OTLP_ENDPOINT)
+}));
 
 app.get('/api/apps', (_req, res) => res.json({ running: runningApps() }));
 
