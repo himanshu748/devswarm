@@ -377,6 +377,19 @@ function setStatus(t, live) {
   s.textContent = t; s.classList.toggle('live', !!live);
 }
 
+// Everything a tab needs to start narrating a run it did not dispatch itself.
+function armRun() {
+  genStart = Date.now(); totalTokens = 0; generationLive = true;
+  clearInterval(elapsedTimer); elapsedTimer = setInterval(tickElapsed, 1000); tickElapsed();
+  document.getElementById('tokens').textContent = '0';
+  document.getElementById('catches').textContent = '0';
+  for (const r of ROLES) { roleTokens[r] = 0; roleMs[r] = 0; }
+  // Bars are positioned relative to genStart, so the last run's rows have to go
+  // with it or they lay out off the left edge.
+  document.getElementById('river').innerHTML = '<div class="zone-title">Trace river</div>';
+  riverBars.length = 0;
+}
+
 function tickElapsed() {
   const s = Math.floor((Date.now() - genStart) / 1000);
   document.getElementById('elapsed').textContent = `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`;
@@ -587,6 +600,10 @@ document.getElementById('doctor-btn').addEventListener('click', async () => {
 
 es.onmessage = (msg) => {
   const e = JSON.parse(msg.data);
+  // A tab opened after a run started never saw its 'planning' stage, so the
+  // first span it receives arms it instead. Without this the vitals sit at
+  // zero and every bar lays out against a genStart of 0.
+  if (e.type === 'llm_start' && !generationLive) armRun();
   if (e.type === 'llm_start') { activate(e.role, e.model); chip(e.role, e.model, roleModels[e.role]?.fb); spanStart(e.role, e.model, e.traceId); }
   if (e.type === 'llm_end') {
     roleTokens[e.role] = (roleTokens[e.role]||0) + e.in + e.out;
@@ -614,16 +631,7 @@ es.onmessage = (msg) => {
   if (e.type === 'stage') {
     // A run dispatched from anywhere (another tab, curl, the API) still arms
     // this tab's vitals; the planning stage is the start-of-run signal.
-    if (e.stage === 'planning' && !generationLive) {
-      genStart = Date.now(); totalTokens = 0; generationLive = true;
-      clearInterval(elapsedTimer); elapsedTimer = setInterval(tickElapsed, 1000); tickElapsed();
-      document.getElementById('tokens').textContent = '0';
-      document.getElementById('catches').textContent = '0';
-      // Bars are positioned relative to genStart, so last run's rows have to go
-      // with it or they lay out off the left edge.
-      document.getElementById('river').innerHTML = '<div class="zone-title">Trace river</div>';
-      riverBars.length = 0;
-    }
+    if (e.stage === 'planning' && !generationLive) armRun();
     setStatus(e.stage + (e.attempt ? ' '+e.attempt : ''), true);
     if (e.stage === 'regenerating') ROLES.forEach(r => nodes[r].classList.remove('flagged'));
     if (e.stage === 'planned') feed('planner', `<b>plan locked</b> ${esc(e.plan.name)}: ${e.plan.api.length} endpoints`);
