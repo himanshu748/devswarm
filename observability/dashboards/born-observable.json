@@ -1,0 +1,19 @@
+{
+  "title": "DevSwarm / Born Observable",
+  "description": "Every app the swarm has built, seen from the outside. Generated apps ship with their own OTel bootstrap and report under their own service name, so this dashboard is populated by code no human wrote. Service names are matched on the generation-id suffix the swarm assigns.",
+  "tags": ["devswarm", "generated-apps"],
+  "layout": [
+    { "i": "apps", "x": 0, "y": 0, "w": 4, "h": 3 },
+    { "i": "spans", "x": 4, "y": 0, "w": 4, "h": 3 },
+    { "i": "errors", "x": 8, "y": 0, "w": 4, "h": 3 },
+    { "i": "traffic", "x": 0, "y": 3, "w": 12, "h": 4 },
+    { "i": "apptable", "x": 0, "y": 7, "w": 12, "h": 5 }
+  ],
+  "widgets": [
+    { "id": "apps", "title": "Apps reporting to SigNoz", "panelTypes": "value", "query": { "queryType": "clickhouse_sql", "clickhouse_sql": [{ "name": "A", "legend": "apps", "disabled": false, "query": "SELECT uniqExact(serviceName) AS value FROM signoz_traces.distributed_signoz_index_v3 WHERE match(serviceName, '-m[a-z0-9]{7,9}$') AND timestamp BETWEEN {{.start_datetime}} AND {{.end_datetime}}" }], "builder": { "queryData": [], "queryFormulas": [] }, "promql": [] } },
+    { "id": "spans", "title": "Spans from generated apps", "panelTypes": "value", "query": { "queryType": "clickhouse_sql", "clickhouse_sql": [{ "name": "A", "legend": "spans", "disabled": false, "query": "SELECT count() AS value FROM signoz_traces.distributed_signoz_index_v3 WHERE match(serviceName, '-m[a-z0-9]{7,9}$') AND timestamp BETWEEN {{.start_datetime}} AND {{.end_datetime}}" }], "builder": { "queryData": [], "queryFormulas": [] }, "promql": [] } },
+    { "id": "errors", "title": "Errored requests", "panelTypes": "value", "query": { "queryType": "clickhouse_sql", "clickhouse_sql": [{ "name": "A", "legend": "errors", "disabled": false, "query": "SELECT countIf(statusCode=2) AS value FROM signoz_traces.distributed_signoz_index_v3 WHERE match(serviceName, '-m[a-z0-9]{7,9}$') AND timestamp BETWEEN {{.start_datetime}} AND {{.end_datetime}}" }], "builder": { "queryData": [], "queryFormulas": [] }, "promql": [] } },
+    { "id": "traffic", "title": "Requests over time, by app", "panelTypes": "graph", "query": { "queryType": "clickhouse_sql", "clickhouse_sql": [{ "name": "A", "legend": "{{app}}", "disabled": false, "query": "SELECT toStartOfInterval(timestamp, INTERVAL 15 MINUTE) AS ts, serviceName AS app, count() AS value FROM signoz_traces.distributed_signoz_index_v3 WHERE match(serviceName, '-m[a-z0-9]{7,9}$') AND timestamp BETWEEN {{.start_datetime}} AND {{.end_datetime}} GROUP BY ts, app ORDER BY ts" }], "builder": { "queryData": [], "queryFormulas": [] }, "promql": [] } },
+    { "id": "apptable", "title": "Every generated app: traffic, latency, last seen", "panelTypes": "table", "query": { "queryType": "clickhouse_sql", "clickhouse_sql": [{ "name": "A", "legend": "", "disabled": false, "query": "SELECT serviceName AS app, count() AS spans, uniqExact(name) AS operations, countIf(statusCode=2) AS errors, round(avg(durationNano)/1e6,1) AS avg_ms, round(quantile(0.95)(durationNano)/1e6,1) AS p95_ms, formatDateTime(max(timestamp), '%F %T') AS last_seen FROM signoz_traces.distributed_signoz_index_v3 WHERE match(serviceName, '-m[a-z0-9]{7,9}$') AND timestamp BETWEEN {{.start_datetime}} AND {{.end_datetime}} GROUP BY app ORDER BY spans DESC LIMIT 40" }], "builder": { "queryData": [], "queryFormulas": [] }, "promql": [] } }
+  ]
+}
