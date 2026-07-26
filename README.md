@@ -4,6 +4,8 @@ DevSwarm turns one prompt into a working full-stack app. Five specialist open-we
 
 Built for the Agents of SigNoz hackathon by WeMakeDevs (July 20 to 26, 2026), Track 1: AI and Agent Observability.
 
+The hackathon's two required files are [`observability/casting.yaml`](observability/casting.yaml) and [`observability/casting.yaml.lock`](observability/casting.yaml.lock): the Foundry config this project's SigNoz was actually installed from, so the whole telemetry stack is reproducible rather than described.
+
 ## Run it on your laptop
 
 You need Node 22 or newer and a Hugging Face token. SigNoz is optional for a first run.
