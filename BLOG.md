@@ -21,7 +21,7 @@ Not one of those was found by reading the code again. Every single one came off 
 
 So this is not an architecture post. It is six times the telemetry told us we were wrong, with the queries.
 
-The current numbers, all read live out of SigNoz rather than typed into a slide: 22 generations, 188 traced model calls across 8 models, 2.84 million tokens, 225 critic catches, 19 fallback promotions and 24 generated apps each reporting under their own service name.
+The current numbers, all read live out of SigNoz rather than typed into a slide: 22 generations, 189 traced model calls across 8 models, 2.85 million tokens, 225 critic catches, 19 fallback promotions and 24 generated apps each reporting under their own service name.
 
 ## What the swarm actually is
 
@@ -41,6 +41,8 @@ Five roles, each on the open-weight model that measured best for that job:
 Everything is served through Hugging Face Inference Providers. There are zero closed-model API calls in the system, which turned out to matter for reasons we did not anticipate (see the provider section below).
 
 The critic is the load-bearing part. Frontend and backend are generated in parallel from the same contract, then an independent model reviews both for contract conformance, security and runtime bugs. Real catches route back to the agent that owns them, that agent patches its own file and the critic re-reviews only the delta. Two regeneration rounds, then it ships with an honest verdict either way.
+
+The same gate runs on changes. Asking a finished app for "a star rating on each book, settable when adding one" re-plans against the stored contract, re-runs only the agents that instruction touches, and puts the result through the identical review. A refinement is its own root span, so a change request is as traceable after the fact as the build that preceded it.
 
 ## Why we instrumented before we polished
 
