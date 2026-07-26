@@ -435,6 +435,7 @@ function spanStart(role, model, traceId) {
   const entry = { bar: row.querySelector('.span-bar'), t0: Date.now(), t1: null };
   bars[role] = entry;
   riverBars.push(entry);
+  paintRiver();
   if (!riverRaf) riverRaf = requestAnimationFrame(layoutRiver);
 }
 
@@ -442,26 +443,44 @@ function spanStart(role, model, traceId) {
 // out once and freezing it bakes in the elapsed time at the moment it ended, so
 // a span that finished early keeps a width measured against a shorter run and
 // grows visually wrong as the generation continues.
-function layoutRiver() {
+function paintRiver() {
   const now = Date.now();
-  const total = Math.max(now - genStart, 1);
+  // Falling back to the first bar's start keeps the timeline sane for a tab
+  // that never saw a run begin, where genStart is still 0.
+  const origin = genStart || (riverBars.length ? riverBars[0].t0 : now);
+  const total = Math.max(now - origin, 1);
   let anyLive = false;
   for (const s of riverBars) {
     const end = s.t1 ?? now;
-    s.bar.style.left = ((s.t0 - genStart) / total * 100) + '%';
+    s.bar.style.left = ((s.t0 - origin) / total * 100) + '%';
     s.bar.style.width = ((end - s.t0) / total * 100) + '%';
     if (s.t1 === null) {
       s.bar.querySelector('.t').textContent = ((now - s.t0) / 1000).toFixed(1) + 's';
       anyLive = true;
     }
   }
+  return anyLive;
+}
+
+// The rAF loop animates the growing bars, but browsers freeze rAF in a hidden
+// tab. Painting on every span event as well means a backgrounded Mission
+// Control still holds correct geometry, and coming back to the tab repaints
+// immediately instead of showing bars that were never laid out at all.
+function layoutRiver() {
+  const anyLive = paintRiver();
   riverRaf = (anyLive || generationLive) ? requestAnimationFrame(layoutRiver) : 0;
 }
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible') return;
+  paintRiver();
+  if (!riverRaf && riverBars.length) riverRaf = requestAnimationFrame(layoutRiver);
+});
 
 function spanEnd(role, ms, tokens) {
   if (bars[role]) {
     bars[role].t1 = Date.now();
     bars[role].bar.querySelector('.t').textContent = (ms/1000).toFixed(1)+'s · '+tokens.toLocaleString()+' tok';
+    paintRiver();
   }
 }
 function relabelSpan(role, model) {
@@ -603,7 +622,7 @@ es.onmessage = (msg) => {
   // A tab opened after a run started never saw its 'planning' stage, so the
   // first span it receives arms it instead. Without this the vitals sit at
   // zero and every bar lays out against a genStart of 0.
-  if (e.type === 'llm_start' && !generationLive) armRun();
+  if (e.type === 'llm_start' && !generationLive && e.role !== 'doctor') armRun();
   if (e.type === 'llm_start') { activate(e.role, e.model); chip(e.role, e.model, roleModels[e.role]?.fb); spanStart(e.role, e.model, e.traceId); }
   if (e.type === 'llm_end') {
     roleTokens[e.role] = (roleTokens[e.role]||0) + e.in + e.out;
