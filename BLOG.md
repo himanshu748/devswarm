@@ -80,9 +80,9 @@ The whole trace layer is now extracted into a small library, [otel-swarm](https:
 
 ## Reading the swarm out of ClickHouse
 
-Four dashboards, all committed as JSON in `observability/dashboards/`. The one we actually live in is Command Center: is the swarm healthy, and if not, which role.
+Five dashboards, all committed as JSON in `observability/dashboards/`. The one we actually live in is Command Center: is the swarm healthy, and if not, which role. The odd one out is Born Observable, which contains no swarm data at all, only the generated apps reporting under their own service names.
 
-Two queries worth sharing, because span events in ClickHouse are not obvious the first time.
+Three queries worth sharing, because span events in ClickHouse are not obvious the first time.
 
 Role health, straight off the trace store:
 
@@ -109,6 +109,21 @@ WHERE serviceName = 'devswarm'
   AND arrayExists(e -> e LIKE '%fallback_promotion%', events)
 GROUP BY ts, role ORDER BY ts
 ```
+
+The one that took longest to work out reads *inside* the events, so you can ask what the review gate actually caught rather than how many times it caught something:
+
+```sql
+SELECT JSONExtractString(e, 'attributeMap', 'severity') AS severity,
+       JSONExtractString(e, 'attributeMap', 'target') AS target,
+       count() AS catches
+FROM signoz_traces.distributed_signoz_index_v3
+ARRAY JOIN events AS e
+WHERE serviceName = 'devswarm' AND name = 'agent.critic'
+  AND JSONExtractString(e, 'name') = 'critic_catch'
+GROUP BY severity, target ORDER BY catches DESC
+```
+
+The answer, over the week: 221 high, 46 medium, 10 low, and the frontend agent is on the receiving end of 70 percent of them. That single row changed how we think about the swarm. The half of the system generating markup and client-side state is where the bugs live, not the half touching the database.
 
 One design decision we are glad about: the marketing numbers on our own landing page are fetched from these same queries at request time. The page cannot drift from the telemetry, because there is only one source of both.
 
