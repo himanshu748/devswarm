@@ -23,7 +23,7 @@
     "@opentelemetry/sdk-trace-node": "^1.30.0",
     "@opentelemetry/semantic-conventions": "^1.30.0",
     "animejs": "^4.5.0",
-    "express": "^4.21.0",
+    "express": "^5.3.0",
     "otel-swarm": "git+https://github.com/himanshu748/otel-swarm.git#33e3843ef18e2b36fcad5a836aba0038e699d32f"
   },
   "devDependencies": {
