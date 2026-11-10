@@ -86,18 +86,21 @@ export async function chat(role, messages, opts = {}) {
   const call = async (model) => {
     lastTried = model;
     const t0 = Date.now();
-    const { content, usage } = await callModel(model, messages, cfg.temperature, cfg.params);
-    // A response that parses to nothing usable is a failed call, not a
-    // successful one. Validating inside call() means unusable output takes the
-    // same fallback path as an HTTP error, instead of throwing downstream and
-    // killing a generation that is minutes deep.
-    if (opts.validate) opts.validate(content);
-    const inTok = usage.prompt_tokens ?? 0;
-    const outTok = usage.completion_tokens ?? 0;
-    m.tokens.add(inTok + outTok, { role, model });
-    m.llmCalls.add(1, { role, model, outcome: model === first ? 'ok' : 'ok_after_fallback' });
-    m.llmDuration.record((Date.now() - t0) / 1000, { role, model });
-    return { content, inputTokens: inTok, outputTokens: outTok };
+    let outcome = 'error';
+    try {
+      const { content, usage } = await callModel(model, messages, cfg.temperature, cfg.params);
+      // Validation failures must take the same fallback path as HTTP errors.
+      if (opts.validate) opts.validate(content);
+      const inTok = usage.prompt_tokens;
+      const outTok = usage.completion_tokens;
+      if (inTok != null || outTok != null) m.tokens.add((inTok ?? 0) + (outTok ?? 0), { role, model });
+      outcome = model === first ? 'ok' : 'ok_after_fallback';
+      return { content, inputTokens: inTok, outputTokens: outTok };
+    } finally {
+      const attributes = { role, model, outcome };
+      m.llmCalls.add(1, attributes);
+      m.llmDuration.record((Date.now() - t0) / 1000, attributes);
+    }
   };
   try {
     const content = await swarm.llm(role, {
@@ -110,7 +113,6 @@ export async function chat(role, messages, opts = {}) {
     if (lastTried === cfg.primary && first === cfg.fallback) demote(role);
     return content;
   } catch (err) {
-    m.llmCalls.add(1, { role, model: lastTried, outcome: 'error' });
     slog('error', `llm call failed for ${role} on both ${first} and ${second}`, { role, reason: String(err.message || err).slice(0, 200) });
     throw err;
   }

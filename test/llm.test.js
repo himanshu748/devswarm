@@ -5,7 +5,7 @@ delete process.env.SIGNOZ_OTLP_ENDPOINT;
 delete process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
 const { chat, extractJson, extractCode } = await import('../src/llm.js');
 import { ROLES, promoted, demote, FALLBACK_TTL_MS } from '../src/models.js';
-const { swarm } = await import('../src/telemetry.js');
+const { swarm, m } = await import('../src/telemetry.js');
 
 const originalFetch = globalThis.fetch;
 const originalToken = process.env.HF_TOKEN;
@@ -86,4 +86,43 @@ test('truncated completions fail after the two-model retry budget', async () => 
   globalThis.fetch = async () => { calls++; return completion('partial artifact', 'length'); };
   await assert.rejects(chat('backend', []), /Truncated completion/);
   assert.equal(calls, 2);
+});
+
+test('records each failed and successful attempt without inventing token usage', async (t) => {
+  process.env.HF_TOKEN = 'synthetic-test-token';
+  const calls = [];
+  const durations = [];
+  const tokens = [];
+  const original = { ...m };
+  t.after(() => Object.assign(m, original));
+  m.llmCalls = { add: (value, attrs) => calls.push({ value, ...attrs }) };
+  m.llmDuration = { record: (value, attrs) => durations.push({ value, ...attrs }) };
+  m.tokens = { add: (value, attrs) => tokens.push({ value, ...attrs }) };
+  let attempt = 0;
+  globalThis.fetch = async () => ++attempt === 1 ? new Response('failed', { status: 503 }) : completion('recovered');
+  assert.equal(await chat('planner', []), 'recovered');
+  assert.deepEqual(calls.map(({ model, outcome }) => ({ model, outcome })), [
+    { model: ROLES.planner.primary, outcome: 'error' },
+    { model: ROLES.planner.fallback, outcome: 'ok_after_fallback' }
+  ]);
+  assert.deepEqual(durations.map(({ model, outcome }) => ({ model, outcome })), calls.map(({ model, outcome }) => ({ model, outcome })));
+  assert.ok(durations.every(({ value }) => value >= 0));
+  assert.deepEqual(tokens, []);
+});
+
+test('records both failed attempts exactly once', async (t) => {
+  process.env.HF_TOKEN = 'synthetic-test-token';
+  const calls = [];
+  const durations = [];
+  const original = { ...m };
+  t.after(() => Object.assign(m, original));
+  m.llmCalls = { add: (value, attrs) => calls.push({ value, ...attrs }) };
+  m.llmDuration = { record: (value, attrs) => durations.push({ value, ...attrs }) };
+  globalThis.fetch = async () => new Response('failed', { status: 503 });
+  await assert.rejects(chat('planner', []), /503/);
+  assert.deepEqual(calls.map(({ model, outcome }) => ({ model, outcome })), [
+    { model: ROLES.planner.primary, outcome: 'error' },
+    { model: ROLES.planner.fallback, outcome: 'error' }
+  ]);
+  assert.deepEqual(durations.map(({ model, outcome }) => ({ model, outcome })), calls.map(({ model, outcome }) => ({ model, outcome })));
 });
