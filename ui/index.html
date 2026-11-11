@@ -309,10 +309,11 @@
   try {
     const r = await fetch('/api/stats');
     if (!r.ok) return;
-    const s = await r.json();
+    const { catches, tokens, generations, llm_calls: llmCalls, models } = (await r.json()) ?? {};
+    if (![catches, tokens, generations, llmCalls, models].every(Number.isFinite)) return;
     const roll = (id, target) => {
       const el = document.getElementById(id);
-      if (!el || !target) return;
+      if (!el) return;
       const start = performance.now(), dur = 900, from = 0;
       const step = (t) => {
         const k = Math.min((t - start) / dur, 1);
@@ -322,10 +323,10 @@
       if (matchMedia('(prefers-reduced-motion: reduce)').matches) el.textContent = target.toLocaleString();
       else requestAnimationFrame(step);
     };
-    roll('stat-catches', s.catches);
-    roll('stat-tokens', s.tokens);
+    roll('stat-catches', catches);
+    roll('stat-tokens', tokens);
     const live = document.getElementById('stats-live');
-    if (live) live.textContent = `live from SigNoz · ${s.generations} generations · ${s.llm_calls} traced LLM calls across ${s.models} models`;
+    if (live) live.textContent = `live from SigNoz · ${generations} generations · ${llmCalls} traced LLM calls across ${models} models`;
   } catch { /* static fallbacks already rendered */ }
 })();
 </script>
