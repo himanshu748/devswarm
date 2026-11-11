@@ -65,7 +65,14 @@ export const DEFAULT_MAX_TOKENS = 32768;
 // FALLBACK_TTL_MINUTES so a transient primary outage never pins a role to its
 // fallback forever; the Swarm Doctor can still reset earlier or re-promote.
 export const promoted = {};
-export const FALLBACK_TTL_MS = (Number(process.env.FALLBACK_TTL_MINUTES) || 10) * 60 * 1000;
+const fallbackTtlMinutes = Number(process.env.FALLBACK_TTL_MINUTES);
+const fallbackTtlMs = fallbackTtlMinutes * 60 * 1000;
+export const FALLBACK_TTL_MS =
+  Number.isFinite(fallbackTtlMinutes) &&
+  fallbackTtlMinutes > 0 &&
+  Number.isFinite(fallbackTtlMs)
+    ? fallbackTtlMs
+    : 10 * 60 * 1000;
 export function promote(role, model, by = 'llm') {
   promoted[role] = { model, at: Date.now(), by };
 }

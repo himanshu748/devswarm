@@ -42,6 +42,10 @@ committed example. Do not change that exception to include real credentials.
 | `FALLBACK_TTL_MINUTES` | `10` | Minutes a fallback remains pinned before retrying primary |
 | `PREVIEW_PORT_BASE` | `4300` | Starting port for generated child servers |
 
+`FALLBACK_TTL_MINUTES` accepts a positive finite number, including fractions.
+Missing, empty, zero, negative, non-finite or overflowing values use the
+10-minute default.
+
 The checked-in model table is historical configuration, not a guarantee of
 current provider availability. Confirm model access with your provider before
 running a paid generation. Do not silently swap model families in unrelated PRs.
