@@ -27,7 +27,7 @@
     "otel-swarm": "git+https://github.com/himanshu748/otel-swarm.git#33e3843ef18e2b36fcad5a836aba0038e699d32f"
   },
   "devDependencies": {
-    "playwright-core": "^1.65.0"
+    "playwright-core": "^1.65.1"
   },
   "description": "Observable multi-agent app generation with open-weight models and SigNoz",
   "license": "MIT",
